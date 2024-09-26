@@ -110,7 +110,7 @@ jobs:
       # We check that the cached query results are up-to-date in another job,
       # to speed up the overall CI pipeline.
       # This will all be covered in detail in chapter 5.
-      SQLX_OFFLINE: true
+      SQLX_OFFLINE: false
     steps:
       - uses: actions/checkout@v4
       - name: Install the Rust toolchain

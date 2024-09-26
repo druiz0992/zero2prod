@@ -8,6 +8,7 @@ use zero2prod::{
 
 pub struct TestApp {
     pub address: String,
+    #[allow(dead_code)]
     pub db_pool: PgPool,
 }
 
