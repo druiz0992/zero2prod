@@ -28,13 +28,19 @@ static TRACING: Lazy<()> = Lazy::new(|| {
 
 pub async fn spawn_app() -> TestApp {
     Lazy::force(&TRACING);
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to random port");
-    let port = listener.local_addr().unwrap().port();
-    let address = format!("http://127.0.0.1:{}", port);
-
     let mut configuration = get_configuration().expect("Failed to read configuration");
+    let listener = TcpListener::bind(format!("{}:0", configuration.application.host))
+        .expect("Failed to bind to random port");
+    let port = listener.local_addr().unwrap().port();
+    log::info!(
+        "Starting test application on http://{}:{}",
+        configuration.application.host,
+        port
+    );
+
     configuration.database.database_name = Uuid::new_v4().to_string();
     let connection_pool = configure_database(&configuration.database).await;
+    let address = format!("http://{}:{}", configuration.application.host, port);
 
     let server = run(listener, connection_pool.clone()).expect("Failed to bind address");
     let _ = tokio::spawn(server);
