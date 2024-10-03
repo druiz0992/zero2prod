@@ -33,14 +33,20 @@ impl TryFrom<String> for Environment {
         }
     }
 }
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone, Debug)]
 pub struct Settings {
+    pub general: GeneralSettings,
     pub database: DatabaseSettings,
     pub application: ApplicationSettings,
     pub email_client: EmailClientSettings,
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct GeneralSettings {
+    pub log_level: String,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
 pub struct EmailClientSettings {
     pub base_url: String,
     pub sender_email: String,
@@ -56,14 +62,15 @@ impl EmailClientSettings {
         std::time::Duration::from_millis(self.timeout_milliseconds)
     }
 }
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone, Debug)]
 pub struct ApplicationSettings {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
+    pub base_url: String,
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone, Debug)]
 pub struct DatabaseSettings {
     pub username: String,
     pub password: Secret<String>,
