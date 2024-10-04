@@ -27,7 +27,7 @@ fn validate_token(token: &str) -> bool {
     // length between 20 and 40
     let correct_length = token.len() > 20 && token.len() < 40;
 
-    return alphanumeric_token && correct_length;
+    alphanumeric_token && correct_length
 }
 
 fn is_alphanumeric(token: &str) -> bool {
