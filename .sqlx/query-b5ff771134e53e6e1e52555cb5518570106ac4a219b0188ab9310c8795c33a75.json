@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT subscription_token FROM subscription_tokens WHERE  subscriber_id= $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subscription_token",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b5ff771134e53e6e1e52555cb5518570106ac4a219b0188ab9310c8795c33a75"
+}
