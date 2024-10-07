@@ -3,8 +3,8 @@ mod subscriptions;
 mod subscriptions_confirm;
 
 pub use health_check::*;
-pub use subscriptions::subscriptions::subscribe;
-pub use subscriptions_confirm::subscriptions_confirm::*;
+pub use subscriptions::subscribe;
+pub use subscriptions_confirm::confirm;
 
 pub fn error_chain_fmt(
     e: &impl std::error::Error,
