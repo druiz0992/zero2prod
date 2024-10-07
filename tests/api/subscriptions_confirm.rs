@@ -65,7 +65,7 @@ async fn both_links_returned_by_subscribe_return_a_200_if_called() {
 
     let email_requests = &app.email_server.received_requests().await.unwrap();
     stream::iter(email_requests.into_iter())
-        .for_each_concurrent(2, |r| async {
+        .for_each_concurrent(None, |r| async {
             let confirmation_links = app.get_confirmation_links(r);
 
             let response = reqwest::get(confirmation_links.html).await.unwrap();
