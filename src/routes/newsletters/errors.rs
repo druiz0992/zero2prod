@@ -1,10 +1,14 @@
 use crate::routes::error_chain_fmt;
-use actix_web::{http::StatusCode, ResponseError};
+use actix_web::http::header::HeaderValue;
+use actix_web::http::{header, StatusCode};
+use actix_web::{HttpResponse, ResponseError};
 
 #[derive(thiserror::Error)]
 pub enum PublishError {
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
+    #[error("Authentication failed")]
+    AuthError(#[source] anyhow::Error),
 }
 
 impl std::fmt::Debug for PublishError {
@@ -13,9 +17,19 @@ impl std::fmt::Debug for PublishError {
     }
 }
 impl ResponseError for PublishError {
-    fn status_code(&self) -> StatusCode {
+    fn error_response(&self) -> actix_web::HttpResponse<actix_web::body::BoxBody> {
         match self {
-            PublishError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            PublishError::UnexpectedError(_) => {
+                HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+            PublishError::AuthError(_) => {
+                let mut response = HttpResponse::new(StatusCode::UNAUTHORIZED);
+                let header_value = HeaderValue::from_str(r#"Basic realm="publish""#).unwrap();
+                response
+                    .headers_mut()
+                    .insert(header::WWW_AUTHENTICATE, header_value);
+                response
+            }
         }
     }
 }
