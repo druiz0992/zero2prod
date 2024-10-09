@@ -1,7 +1,10 @@
 mod errors;
 
 use errors::*;
+use uuid::Uuid;
 
+use crate::domain::{Newsletter, NewsletterBody};
+use crate::routes::get_token_from_subscriber_id;
 use crate::telemetry::spawn_blocking_with_tracing;
 use crate::{domain::SubscriberEmail, email_client::EmailClient};
 use actix_web::http::header::HeaderMap;
@@ -32,17 +35,31 @@ struct Credentials {
     password: Secret<String>,
 }
 
+impl TryFrom<BodyData> for Newsletter {
+    type Error = String;
+
+    fn try_from(body: BodyData) -> Result<Self, Self::Error> {
+        let newsletter = Newsletter::parse(body.title, body.content.html, body.content.text)?;
+        Ok(newsletter)
+    }
+}
+
 #[tracing::instrument(
     name="Publish a newsletter issue",
     skip(body, pool, email_client, request),
-    fields(username=tracing::field::Empty, user_id=tracing::field::Empty)
+    fields(username=tracing::field::Empty, user_id=tracing::field::Empty, subscriber_email=tracing::field::Empty)
 )]
 pub async fn publish_newsletter(
     body: web::Json<BodyData>,
     pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
+    base_url: web::Data<String>,
     request: HttpRequest,
 ) -> Result<HttpResponse, PublishError> {
+    let newsletter: Newsletter = body
+        .0
+        .try_into()
+        .map_err(|e| PublishError::ValidationError(e))?;
     let credentials = basic_authentication(request.headers()).map_err(PublishError::AuthError)?;
     tracing::Span::current().record("username", tracing::field::display(&credentials.username));
     let user_id = validate_credentials(credentials, &pool).await?;
@@ -51,12 +68,23 @@ pub async fn publish_newsletter(
     for subscriber in subscribers {
         match subscriber {
             Ok(subscriber) => {
+                tracing::Span::current().record(
+                    "subscriber_email",
+                    tracing::field::display(&subscriber.email),
+                );
+                let subscriber_id = get_subscriber_id_from_email(&pool, subscriber.email.as_ref())
+                    .await
+                    .context("Failed to retreive subscriber id from database")?;
+                let subscription_token = get_token_from_subscriber_id(&pool, &subscriber_id)
+                    .await
+                    .context("Failed to read unsubscribe token from database.")?;
+                let unsubscribe_link = build_unsubscribe_link(&base_url, &subscription_token);
                 email_client
                     .send_email(
                         &subscriber.email,
-                        &body.title,
-                        &body.content.html,
-                        &body.content.text,
+                        newsletter.title.as_ref(),
+                        &embed_link_to_html_content(&newsletter.content.html, &unsubscribe_link),
+                        &embed_link_to_text_content(&newsletter.content.text, &unsubscribe_link),
                     )
                     .await
                     .with_context(|| {
@@ -72,6 +100,34 @@ pub async fn publish_newsletter(
         }
     }
     Ok(HttpResponse::Ok().finish())
+}
+
+fn embed_link_to_text_content(body: &NewsletterBody, link: &str) -> String {
+    let text_with_link = format!(
+        "\nClick <a href=\"{}\">here</a> to unsubscribe from newsletter.",
+        link
+    );
+    let content_with_link = format!("{} {} ", body.as_ref(), text_with_link);
+    content_with_link
+}
+fn embed_link_to_html_content(body: &NewsletterBody, link: &str) -> String {
+    let text_with_link = format!("\nClick here {} to unsubscribe from newsletter.", link);
+    let content_with_link = format!("{} {} ", body.as_ref(), text_with_link);
+    content_with_link
+}
+
+fn build_unsubscribe_link(base_url: &str, token: &str) -> String {
+    let unsubscribe_link = format!("{}/subscriptions/unsubscribe?token={}", base_url, token);
+    unsubscribe_link
+}
+
+#[tracing::instrument(name = "Get subscriber id", skip(pool, email))]
+async fn get_subscriber_id_from_email(pool: &PgPool, email: &str) -> Result<Uuid, anyhow::Error> {
+    let subscriber_id = sqlx::query!("SELECT id from subscriptions WHERE email=$1", email)
+        .fetch_one(pool)
+        .await?;
+
+    Ok(subscriber_id.id)
 }
 
 #[tracing::instrument(name = "Get confirmed subscribers", skip(pool))]

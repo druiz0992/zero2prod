@@ -19,13 +19,7 @@ async fn create_unconfirmed_subscriber(app: &TestApp) -> ConfirmationLinks {
         .error_for_status()
         .unwrap();
 
-    let email_request = &app
-        .email_server
-        .received_requests()
-        .await
-        .unwrap()
-        .pop()
-        .unwrap();
+    let email_request = &app.get_email_requests().await;
     app.get_confirmation_links(&email_request)
 }
 
@@ -38,8 +32,57 @@ async fn create_confirmed_subscriber(app: &TestApp) {
         .unwrap();
 }
 
-fn get_newsletter_body() -> serde_json::Value {
-    serde_json::json!({"title": "Newsletter title", "content": { "text": "Newsletter body as plain text", "html": "<p>Newsletter body as HTML</p>"}})
+#[derive(Clone, Debug)]
+struct Newsletter(serde_json::Value);
+impl Newsletter {
+    fn new() -> Newsletter {
+        Newsletter(serde_json::json!({}))
+    }
+    fn title(mut self) -> Newsletter {
+        let title_value = "Newsletter title";
+        self.0.as_object_mut().unwrap().insert(
+            "title".to_string(),
+            serde_json::Value::String(title_value.into()),
+        );
+        self
+    }
+    fn text_body(mut self) -> Newsletter {
+        let text_body_value = "Newsletter body as plain text.";
+        let content = self
+            .0
+            .as_object_mut()
+            .unwrap()
+            .entry("content")
+            .or_insert_with(|| serde_json::json!({}));
+
+        content.as_object_mut().unwrap().insert(
+            "text".to_string(),
+            serde_json::Value::String(text_body_value.into()),
+        );
+        self
+    }
+    fn html_body(mut self) -> Newsletter {
+        let html_body_value = "<p>Newsletter body as HTML.";
+        let content = self
+            .0
+            .as_object_mut()
+            .unwrap()
+            .entry("content")
+            .or_insert_with(|| serde_json::json!({}));
+        content.as_object_mut().unwrap().insert(
+            "html".to_string(),
+            serde_json::Value::String(html_body_value.into()),
+        );
+        self
+    }
+    fn inner(self) -> serde_json::Value {
+        self.0
+    }
+}
+
+fn build_newsletter() -> Newsletter {
+    let newsletter = Newsletter::new().title().text_body().html_body();
+    newsletter
 }
 
 #[tokio::test]
@@ -55,8 +98,8 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
         .await;
 
     // Act
-    let newsletter_request_body = get_newsletter_body();
-    let response = app.post_newsletters(newsletter_request_body).await;
+    let newsletter_request_body = build_newsletter();
+    let response = app.post_newsletters(newsletter_request_body.inner()).await;
 
     // Assert
     assert_eq!(response.status().as_u16(), 200);
@@ -75,9 +118,9 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
         .mount(&app.email_server)
         .await;
 
-    let newsletter_request_body = get_newsletter_body();
+    let newsletter_request_body = build_newsletter();
 
-    let response = app.post_newsletters(newsletter_request_body).await;
+    let response = app.post_newsletters(newsletter_request_body.inner()).await;
 
     assert_eq!(response.status().as_u16(), 200);
 }
@@ -86,18 +129,31 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
 async fn newsletter_returns_400_for_invalid_data() {
     let app = spawn_app().await;
     let test_cases = vec![
+        (Newsletter::new(), "Empty newsletter"),
+        (Newsletter::new().title(), "Missing content"),
         (
-            serde_json::json!({"content": {"text": "Newsletter body as plain text", "html": "<p>Newsletter body as HTML</p>"}}),
-            "missing title",
+            Newsletter::new().text_body(),
+            "Missing title and HTML content",
         ),
         (
-            serde_json::json!({"title": "Newsletter!"}),
-            "Missing content",
+            Newsletter::new().html_body(),
+            "Missing title and text content",
+        ),
+        (Newsletter::new().title().html_body(), "Missing text"),
+        (Newsletter::new().text_body(), "Missing HTML and title"),
+        (Newsletter::new().text_body().html_body(), "Missing title"),
+        (
+            Newsletter::new().title().title().html_body(),
+            "Missing Text",
+        ),
+        (
+            Newsletter::new().title().title().text_body(),
+            "Missing HTML",
         ),
     ];
 
     for (invalid_body, error_message) in test_cases {
-        let response = app.post_newsletters(invalid_body).await;
+        let response = app.post_newsletters(invalid_body.inner()).await;
 
         assert_eq!(
             400,
@@ -114,7 +170,7 @@ async fn requests_missing_authorization_are_rejected() {
 
     let response = reqwest::Client::new()
         .post(&format!("{}/newsletters", &app.address))
-        .json(&get_newsletter_body())
+        .json(&build_newsletter().inner())
         .send()
         .await
         .expect("Failed to execute request");
@@ -136,7 +192,7 @@ async fn non_existing_user_is_rejected() {
     let response = reqwest::Client::new()
         .post(&format!("{}/newsletters", &app.address))
         .basic_auth(username, Some(password))
-        .json(&get_newsletter_body())
+        .json(&build_newsletter().inner())
         .send()
         .await
         .expect("Failed to execute request.");
@@ -160,7 +216,7 @@ async fn invalid_password_is_rejected() {
     let response = reqwest::Client::new()
         .post(&format!("{}/newsletters", &app.address))
         .basic_auth(username, Some(password))
-        .json(&get_newsletter_body())
+        .json(&build_newsletter().inner())
         .send()
         .await
         .expect("Failed to execute request.");
@@ -169,5 +225,51 @@ async fn invalid_password_is_rejected() {
     assert_eq!(
         r#"Basic realm="publish""#,
         response.headers()["WWW-Authenticate"]
+    );
+}
+
+#[tokio::test]
+async fn both_unsubscribe_links_in_newsletter_return_a_200_if_called() {
+    let app: TestApp = spawn_app().await;
+    create_confirmed_subscriber(&app).await;
+
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&app.email_server)
+        .await;
+
+    let newsletter_request_body = build_newsletter();
+
+    app.post_newsletters(newsletter_request_body.inner()).await;
+
+    let email_newsletter = &app.get_email_requests().await;
+    let confirmation_links = app.get_newsletter_unsubscribe_links(&email_newsletter);
+
+    let response_text = reqwest::Client::new()
+        .get(&format!("{}", confirmation_links.plain_text))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(
+        200,
+        response_text.status().as_u16(),
+        "Checking unsubscribe link in text newsletter {}",
+        confirmation_links.plain_text
+    );
+
+    let response_html = reqwest::Client::new()
+        .get(&format!("{}", confirmation_links.html))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(
+        200,
+        response_html.status().as_u16(),
+        "Checking unsubscribe link in HTML newsletter {}",
+        confirmation_links.html
     );
 }

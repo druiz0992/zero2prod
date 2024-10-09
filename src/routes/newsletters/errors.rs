@@ -9,6 +9,8 @@ pub enum PublishError {
     UnexpectedError(#[from] anyhow::Error),
     #[error("Authentication failed")]
     AuthError(#[source] anyhow::Error),
+    #[error("{0}")]
+    ValidationError(String),
 }
 
 impl std::fmt::Debug for PublishError {
@@ -19,6 +21,7 @@ impl std::fmt::Debug for PublishError {
 impl ResponseError for PublishError {
     fn error_response(&self) -> actix_web::HttpResponse<actix_web::body::BoxBody> {
         match self {
+            PublishError::ValidationError(_) => HttpResponse::new(StatusCode::BAD_REQUEST),
             PublishError::UnexpectedError(_) => {
                 HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
             }
