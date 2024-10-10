@@ -1,5 +1,5 @@
 general:
-  log_level: "trace"
+  log_level: "info"
 application:
   port: 8000
 database: 
