@@ -17,12 +17,12 @@ impl TryFrom<UnsubscribeParameters> for SubscriptionToken {
         Ok(token)
     }
 }
-#[tracing::instrument(name = "Removing asubscriber", skip(pool, parameters))]
+#[tracing::instrument(name = "Removing asubscriber", skip(_pool, parameters))]
 pub async fn unsubscribe(
-    pool: web::Data<PgPool>,
+    _pool: web::Data<PgPool>,
     parameters: web::Query<UnsubscribeParameters>,
 ) -> Result<HttpResponse, UnsubscribeError> {
-    let unsubscribe_token: SubscriptionToken = parameters
+    let _unsubscribe_token: SubscriptionToken = parameters
         .0
         .try_into()
         .map_err(UnsubscribeError::ValidationError)?;

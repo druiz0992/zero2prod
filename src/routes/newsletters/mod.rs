@@ -56,10 +56,7 @@ pub async fn publish_newsletter(
     base_url: web::Data<String>,
     request: HttpRequest,
 ) -> Result<HttpResponse, PublishError> {
-    let newsletter: Newsletter = body
-        .0
-        .try_into()
-        .map_err(|e| PublishError::ValidationError(e))?;
+    let newsletter: Newsletter = body.0.try_into().map_err(PublishError::ValidationError)?;
     let credentials = basic_authentication(request.headers()).map_err(PublishError::AuthError)?;
     tracing::Span::current().record("username", tracing::field::display(&credentials.username));
     let user_id = validate_credentials(credentials, &pool).await?;
@@ -193,7 +190,7 @@ CWOrkoo7oJBQ/iyh7uJ0LO2aLEfrHwTWllSAxT0zRno"
     if let Some((stored_user_id, stored_password_hash)) =
         get_stored_credentials(&credentials.username, pool)
             .await
-            .map_err(PublishError::UnexpectedError)?
+            .map_err(PublishError::Unexpected)?
     {
         user_id = Some(stored_user_id);
         expected_password_hash = stored_password_hash;
@@ -204,7 +201,7 @@ CWOrkoo7oJBQ/iyh7uJ0LO2aLEfrHwTWllSAxT0zRno"
     })
     .await
     .context("Failed to spawn a blocking task.")
-    .map_err(PublishError::UnexpectedError)??;
+    .map_err(PublishError::Unexpected)??;
 
     user_id.ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username.")))
 }
@@ -219,7 +216,7 @@ fn verify_password_hash(
 ) -> Result<(), PublishError> {
     let expected_password_hash = PasswordHash::new(expected_password_hash.expose_secret())
         .context("Failed to parse hash in PHC string format.")
-        .map_err(PublishError::UnexpectedError)?;
+        .map_err(PublishError::Unexpected)?;
 
     Argon2::default()
         .verify_password(

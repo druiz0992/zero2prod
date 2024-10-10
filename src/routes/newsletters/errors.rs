@@ -6,7 +6,7 @@ use actix_web::{HttpResponse, ResponseError};
 #[derive(thiserror::Error)]
 pub enum PublishError {
     #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
+    Unexpected(#[from] anyhow::Error),
     #[error("Authentication failed")]
     AuthError(#[source] anyhow::Error),
     #[error("{0}")]
@@ -22,9 +22,7 @@ impl ResponseError for PublishError {
     fn error_response(&self) -> actix_web::HttpResponse<actix_web::body::BoxBody> {
         match self {
             PublishError::ValidationError(_) => HttpResponse::new(StatusCode::BAD_REQUEST),
-            PublishError::UnexpectedError(_) => {
-                HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
-            }
+            PublishError::Unexpected(_) => HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR),
             PublishError::AuthError(_) => {
                 let mut response = HttpResponse::new(StatusCode::UNAUTHORIZED);
                 let header_value = HeaderValue::from_str(r#"Basic realm="publish""#).unwrap();

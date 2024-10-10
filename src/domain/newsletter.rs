@@ -5,15 +5,13 @@ pub struct Newsletter {
     pub content: NewsletterContent,
 }
 
-//Click <a href=\"{}\">here</a> to confirm your subscription.",
-
 #[derive(Debug, PartialEq)]
 pub struct NewsletterTitle(String);
 
 impl NewsletterTitle {
     fn parse(title: String) -> Result<NewsletterTitle, String> {
         if title.is_empty() || title.len() > NEWSLETTER_TITLE_MAX_LENGTH {
-            Err(format!("Invalid newsletter title."))
+            Err("Invalid newsletter title.".to_string())
         } else {
             Ok(Self(title))
         }
@@ -43,7 +41,7 @@ impl AsRef<str> for NewsletterBody {
 impl NewsletterBody {
     fn parse(body: String) -> Result<NewsletterBody, String> {
         if body.is_empty() {
-            return Err(format!("Newsletter body cannot be empty"));
+            return Err("Newsletter body cannot be empty".to_string());
         }
         Ok(NewsletterBody(body))
     }
