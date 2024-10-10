@@ -1,4 +1,4 @@
-use crate::helpers::{spawn_app, ConfirmationLinks, TestApp};
+use crate::helpers::spawn_app; //, ConfirmationLinks, TestApp};
 
 #[tokio::test]
 async fn unsubscribe_request_without_token_is_rejected() {
