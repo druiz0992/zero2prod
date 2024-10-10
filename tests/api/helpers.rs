@@ -93,6 +93,13 @@ impl TestApp {
         ConfirmationLinks { html, plain_text }
     }
 
+    pub fn get_newsletter_unsubscribe_links(
+        &self,
+        email_requests: &wiremock::Request,
+    ) -> ConfirmationLinks {
+        self.get_confirmation_links(&email_requests)
+    }
+
     pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
         reqwest::Client::new()
             .post(&format!("{}/newsletters", &self.address))
@@ -101,6 +108,15 @@ impl TestApp {
             .send()
             .await
             .expect("Failed to execute request.")
+    }
+
+    pub async fn get_email_requests(&self) -> wiremock::Request {
+        self.email_server
+            .received_requests()
+            .await
+            .unwrap()
+            .pop()
+            .unwrap()
     }
 }
 
