@@ -1,13 +1,13 @@
 use validator::validate_email;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct SubscriberEmail(String);
 impl SubscriberEmail {
     pub fn parse(s: String) -> Result<SubscriberEmail, String> {
         if validate_email(&s) {
             Ok(Self(s))
         } else {
-            Err(format!("{} is no a valid subscirber email", s))
+            Err(format!("{} is no a valid subscriber email", s))
         }
     }
 }

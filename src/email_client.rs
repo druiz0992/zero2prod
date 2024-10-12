@@ -1,7 +1,8 @@
-use crate::domain::SubscriberEmail;
+use crate::domain::new_subscriber::models::email::SubscriberEmail;
 use reqwest::Client;
 use secrecy::{ExposeSecret, Secret};
 
+#[derive(Debug)]
 pub struct EmailClient {
     http_client: Client,
     base_url: String,
@@ -66,7 +67,7 @@ struct SendEmailRequest<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::SubscriberEmail;
+    use crate::domain::new_subscriber::models::email::SubscriberEmail;
     use crate::email_client::EmailClient;
     use claim::{assert_err, assert_ok};
     use fake::faker::internet::en::SafeEmail;

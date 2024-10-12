@@ -2,8 +2,11 @@ use argon2::password_hash::SaltString;
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version};
 use once_cell::sync::Lazy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
+use std::sync::Arc;
 use uuid::Uuid;
 use wiremock::MockServer;
+use zero2prod::domain::new_subscriber::service::Subscription;
+use zero2prod::outbound::db::postgres_db::PostgresDb;
 use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
     startup::{get_connection_pool, Application},
@@ -56,7 +59,7 @@ pub struct ConfirmationLinks {
 pub struct TestApp {
     pub address: String,
     #[allow(dead_code)]
-    pub db_pool: PgPool,
+    pub subscription_service: Box<Subscription<PostgresDb>>,
     pub email_server: MockServer,
     pub port: u16,
     pub test_user: TestUser,
@@ -151,15 +154,18 @@ pub async fn spawn_app() -> TestApp {
         .expect("Failed to build application");
     let application_port = application.port();
     let _ = tokio::spawn(application.run_until_stopped());
+    let subscription_repo = PostgresDb::new(&configuration.database);
+    let subscription_service = Box::new(Subscription::new(subscription_repo));
 
     let test_app = TestApp {
         address: format!("http://localhost:{}", application_port),
         port: application_port,
-        db_pool: get_connection_pool(&configuration.database),
+        subscription_service,
         email_server,
         test_user: TestUser::generate(),
     };
-    test_app.test_user.store(&test_app.db_pool).await;
+    // TODO
+    //test_app.test_user.store(&test_app.db_pool).await;
     test_app
 }
 

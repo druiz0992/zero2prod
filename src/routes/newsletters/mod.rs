@@ -3,10 +3,11 @@ mod errors;
 use errors::*;
 use uuid::Uuid;
 
-use crate::domain::{Newsletter, NewsletterBody};
+use crate::domain::new_subscriber::models::token::SubscriptionToken;
+use crate::domain::newsletter::models::newsletter::{Newsletter, NewsletterBody};
 use crate::routes::get_token_from_subscriber_id;
 use crate::telemetry::spawn_blocking_with_tracing;
-use crate::{domain::SubscriberEmail, email_client::EmailClient};
+use crate::{domain::new_subscriber::models::email::SubscriberEmail, email_client::EmailClient};
 use actix_web::http::header::HeaderMap;
 use actix_web::{web, HttpRequest, HttpResponse};
 use anyhow::Context;
@@ -72,9 +73,10 @@ pub async fn publish_newsletter(
                 let subscriber_id = get_subscriber_id_from_email(&pool, subscriber.email.as_ref())
                     .await
                     .context("Failed to retreive subscriber id from database")?;
-                let subscription_token = get_token_from_subscriber_id(&pool, &subscriber_id)
-                    .await
-                    .context("Failed to read unsubscribe token from database.")?;
+                let subscription_token =
+                    get_token_from_subscriber_id(&pool, subscriber_id)
+                        .await
+                        .context("Failed to read unsubscribe token from database.")?;
                 let unsubscribe_link = build_unsubscribe_link(&base_url, &subscription_token);
                 email_client
                     .send_email(
@@ -113,8 +115,12 @@ fn embed_link_to_html_content(body: &NewsletterBody, link: &str) -> String {
     content_with_link
 }
 
-fn build_unsubscribe_link(base_url: &str, token: &str) -> String {
-    let unsubscribe_link = format!("{}/subscriptions/unsubscribe?token={}", base_url, token);
+fn build_unsubscribe_link(base_url: &str, token: &SubscriptionToken) -> String {
+    let unsubscribe_link = format!(
+        "{}/subscriptions/unsubscribe?token={}",
+        base_url,
+        token.as_ref()
+    );
     unsubscribe_link
 }
 

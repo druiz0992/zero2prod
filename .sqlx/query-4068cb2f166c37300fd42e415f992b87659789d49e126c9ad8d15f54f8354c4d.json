@@ -1,32 +1,40 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT email, name, status FROM subscriptions",
+  "query": "SELECT id, email, name, status FROM subscriptions WHERE email = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
         "name": "email",
         "type_info": "Text"
       },
       {
-        "ordinal": 1,
+        "ordinal": 2,
         "name": "name",
         "type_info": "Text"
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "status",
         "type_info": "Text"
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Text"
+      ]
     },
     "nullable": [
+      false,
       false,
       false,
       false
     ]
   },
-  "hash": "9ab6536d2bf619381573b3bf13507d53b2e9cf50051e51c803e916f25b51abd2"
+  "hash": "4068cb2f166c37300fd42e415f992b87659789d49e126c9ad8d15f54f8354c4d"
 }

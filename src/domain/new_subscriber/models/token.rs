@@ -1,3 +1,5 @@
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
+
 #[derive(Debug)]
 pub struct SubscriptionToken(String);
 
@@ -10,14 +12,27 @@ impl SubscriptionToken {
         }
     }
 
-    pub fn new(s: &str) -> Self {
-        SubscriptionToken(s.to_string())
+    pub fn new() -> Self {
+        let mut rng = thread_rng();
+        let token = std::iter::repeat_with(|| rng.sample(Alphanumeric))
+            .map(char::from)
+            .take(25)
+            .collect();
+        SubscriptionToken::parse(token).unwrap()
     }
 }
 
 impl AsRef<str> for SubscriptionToken {
     fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+
+impl TryFrom<String> for SubscriptionToken {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        SubscriptionToken::parse(value)
     }
 }
 
@@ -36,7 +51,7 @@ fn is_alphanumeric(token: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::SubscriptionToken;
+    use super::SubscriptionToken;
     use claim::{assert_err, assert_ok};
     use rand::{distributions::Alphanumeric, seq::SliceRandom, Rng};
 

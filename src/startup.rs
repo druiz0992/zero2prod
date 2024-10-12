@@ -1,6 +1,10 @@
 use crate::configuration::DatabaseSettings;
 use crate::configuration::Settings;
+use crate::domain::new_subscriber::ports::SubscriptionRepository;
+use crate::domain::new_subscriber::ports::SubscriptionService;
+use crate::domain::new_subscriber::service::Subscription;
 use crate::email_client::EmailClient;
+use crate::outbound::db::postgres_db::PostgresDb;
 use crate::routes::{confirm, health_check, publish_newsletter, subscribe, unsubscribe};
 use actix_web::dev::Server;
 use actix_web::web::Data;
@@ -8,6 +12,7 @@ use actix_web::{web, App, HttpServer};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::net::TcpListener;
+use std::sync::Arc;
 use tracing_actix_web::TracingLogger;
 
 pub struct Application {
@@ -20,11 +25,11 @@ pub struct ApplicationBaseUrl(pub String);
 
 pub fn run(
     listener: TcpListener,
-    db_pool: PgPool,
+    subscription_service: Box<dyn SubscriptionService>,
     email_client: EmailClient,
     base_url: String,
 ) -> Result<Server, std::io::Error> {
-    let db_pool = web::Data::new(db_pool);
+    let subscription_service = web::Data::new(subscription_service);
     let email_client = web::Data::new(email_client);
     let base_url = Data::new(base_url);
     let server = HttpServer::new(move || {
@@ -36,7 +41,7 @@ pub fn run(
             .route("/subscriptions/confirm", web::get().to(confirm))
             .route("/subscriptions/unsubscribe", web::get().to(unsubscribe))
             .route("/newsletters", web::post().to(publish_newsletter))
-            .app_data(db_pool.clone())
+            .app_data(subscription_service.clone())
             .app_data(base_url.clone())
             .app_data(email_client.clone())
     })
@@ -48,7 +53,7 @@ pub fn run(
 
 impl Application {
     pub async fn build(configuration: Settings) -> Result<Self, std::io::Error> {
-        let connection_pool = get_connection_pool(&configuration.database);
+        let connection_pool = PostgresDb::new(&configuration.database);
 
         let sender_email = configuration
             .email_client
@@ -68,10 +73,12 @@ impl Application {
         );
         let listener = TcpListener::bind(address)?;
         let port = listener.local_addr().unwrap().port();
+        let subscription_repo = connection_pool;
+        let subscription_service = Subscription::new(subscription_repo);
 
         let server = run(
             listener,
-            connection_pool,
+            Box::new(subscription_service),
             email_client,
             configuration.application.base_url,
         )?;

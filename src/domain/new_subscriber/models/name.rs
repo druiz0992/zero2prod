@@ -1,6 +1,6 @@
 use unicode_segmentation::UnicodeSegmentation;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct SubscriberName(String);
 
 impl SubscriberName {
@@ -38,9 +38,14 @@ impl AsRef<str> for SubscriberName {
     }
 }
 
+impl std::fmt::Display for SubscriberName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 #[cfg(test)]
 mod tests {
-    use crate::domain::SubscriberName;
+    use super::SubscriberName;
     use claim::{assert_err, assert_ok};
 
     #[test]

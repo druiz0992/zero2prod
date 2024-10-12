@@ -1,6 +1,6 @@
 mod errors;
 
-use crate::domain::SubscriptionToken;
+use crate::domain::new_subscriber::models::token::SubscriptionToken;
 use actix_web::{web, HttpResponse};
 use errors::*;
 use sqlx::PgPool;

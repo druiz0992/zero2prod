@@ -1,6 +1,13 @@
 use crate::helpers::spawn_app;
+use serde::Deserialize;
+use serde_urlencoded;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
+use zero2prod::domain::new_subscriber::models::subscriber::{
+    NewSubscriber, NewSubscriberError, NewSubscriberRequest, SubscriberStatus,
+};
+use zero2prod::domain::new_subscriber::models::token::SubscriptionToken;
+use zero2prod::domain::new_subscriber::ports::SubscriptionRepository;
 
 #[tokio::test]
 async fn subscribe_returns_200_for_valid_form_data() {
@@ -21,6 +28,8 @@ async fn subscribe_returns_200_for_valid_form_data() {
 async fn subscribe_persists_the_new_subscriber() {
     let app = spawn_app().await;
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let subscriber_request: NewSubscriberRequest = serde_urlencoded::from_str(body).unwrap();
+    let token = SubscriptionToken::new();
 
     Mock::given(path("/email"))
         .and(method("POST"))
@@ -30,14 +39,22 @@ async fn subscribe_persists_the_new_subscriber() {
 
     app.post_subscriptions(body.into()).await;
 
-    let saved = sqlx::query!("SELECT email, name, status FROM subscriptions",)
-        .fetch_one(&app.db_pool)
+    let (updated_subscriber, _) = app
+        .subscription_service
+        .repo
+        .retrieve_or_insert(subscriber_request, token)
         .await
         .expect("Failed to fetch saved subscription.");
 
-    assert_eq!(saved.name, "le guin");
-    assert_eq!(saved.email, "ursula_le_guin@gmail.com");
-    assert_eq!(saved.status, "pending_confirmation");
+    assert_eq!(updated_subscriber.name.as_ref(), "le guin");
+    assert_eq!(
+        updated_subscriber.email.as_ref(),
+        "ursula_le_guin@gmail.com"
+    );
+    assert_eq!(
+        updated_subscriber.status,
+        SubscriberStatus::SubscriptionPendingConfirmation
+    );
 }
 
 #[tokio::test]
@@ -143,10 +160,7 @@ async fn subscribe_fails_if_there_is_a_fatal_database_error() {
     let app = spawn_app().await;
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
     // Sabotage the database
-    sqlx::query!("ALTER TABLE subscriptions DROP COLUMN email;",)
-        .execute(&app.db_pool)
-        .await
-        .unwrap();
+    app.subscription_service.repo.drop_column("email").await;
     // Act
     let response = app.post_subscriptions(body.into()).await;
     // Assert
