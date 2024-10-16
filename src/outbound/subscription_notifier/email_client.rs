@@ -169,7 +169,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let subscription_token = SubscriptionToken::new();
+        let subscription_token = SubscriptionToken::default();
 
         let message = email_client.build_notification(subscription_token).unwrap();
         let _ = email_client.send_notification(&email(), &message).await;
@@ -186,7 +186,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let subscription_token = SubscriptionToken::new();
+        let subscription_token = SubscriptionToken::default();
 
         let message = email_client.build_notification(subscription_token).unwrap();
         let outcome = email_client.send_notification(&email(), &message).await;
@@ -205,7 +205,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let subscription_token = SubscriptionToken::new();
+        let subscription_token = SubscriptionToken::default();
 
         let message = email_client.build_notification(subscription_token).unwrap();
         let outcome = email_client.send_notification(&email(), &message).await;
@@ -226,7 +226,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let subscription_token = SubscriptionToken::new();
+        let subscription_token = SubscriptionToken::default();
 
         let message = email_client.build_notification(subscription_token).unwrap();
         let outcome = email_client.send_notification(&email(), &message).await;

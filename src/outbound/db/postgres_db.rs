@@ -116,6 +116,52 @@ impl PostgresDb {
         Ok(())
     }
 
+    #[tracing::instrument(
+        name = "Delete token from subscriber id",
+        skip(self, transaction, subscriber_id)
+    )]
+    async fn delete_subscriber_with_id(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        subscriber_id: uuid::Uuid,
+    ) -> Result<(), SubscriberRepositoryError> {
+        let query = sqlx::query!(r#"DELETE FROM subscriptions WHERE  id= $1"#, subscriber_id);
+        let result = transaction
+            .execute(query)
+            .await
+            .map_err(|e| SubscriberRepositoryError::Unexpected(anyhow::Error::from(e)))?;
+
+        if result.rows_affected() == 0 {
+            return Err(SubscriberRepositoryError::SubscriberNotFound);
+        }
+
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        name = "Delete subscriber with subscriber id",
+        skip(self, transaction, subscriber_id)
+    )]
+    async fn delete_token_from_subscriber_id(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        subscriber_id: uuid::Uuid,
+    ) -> Result<(), SubscriberRepositoryError> {
+        let query = sqlx::query!(
+            r#"DELETE FROM subscription_tokens WHERE  subscriber_id= $1"#,
+            subscriber_id
+        );
+        let result = transaction
+            .execute(query)
+            .await
+            .map_err(|e| SubscriberRepositoryError::Unexpected(anyhow::Error::from(e)))?;
+
+        if result.rows_affected() == 0 {
+            return Err(SubscriberRepositoryError::UnknownToken);
+        }
+
+        Ok(())
+    }
     #[tracing::instrument(name = "Get token from subscriber id", skip(self, subscriber_id))]
     async fn get_token_from_subscriber_id(
         &self,
@@ -272,5 +318,25 @@ impl SubscriberRepository for PostgresDb {
             .context("Failed retrieving subscriber from a given subscriber id")?;
 
         Ok(subscriber)
+    }
+
+    #[tracing::instrument(name = "Deleting subscriber", skip(subscriber, self))]
+    async fn delete(&self, subscriber: NewSubscriber) -> Result<(), SubscriberRepositoryError> {
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .context("Failed to acquire a Postgress connection from the pool")?;
+        let subscriber_id = subscriber.id.unwrap();
+        self.delete_token_from_subscriber_id(&mut transaction, subscriber_id)
+            .await?;
+        self.delete_subscriber_with_id(&mut transaction, subscriber_id)
+            .await?;
+        transaction
+            .commit()
+            .await
+            .context("Failed to commit SQL transaction to delete a subscriber")?;
+
+        Ok(())
     }
 }

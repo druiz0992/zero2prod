@@ -1,10 +1,7 @@
 use crate::configuration::ApplicationSettings;
 use crate::domain::new_subscriber::ports::{SubscriptionService, SubscriptionServiceError};
-use crate::inbound::http::handlers::confirm::confirm;
-use crate::inbound::http::handlers::health_check::health_check;
-use crate::inbound::http::handlers::subscribe::subscribe;
+use crate::inbound::http::handlers::{confirm, health_check, subscribe, unsubscribe};
 use crate::routes::error_chain_fmt;
-use crate::routes::unsubscribe;
 use actix_web::dev::Server;
 use actix_web::{http::StatusCode, ResponseError};
 use actix_web::{web, App, HttpServer};
@@ -36,7 +33,10 @@ fn run<SS: SubscriptionService>(
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe::<SS>))
             .route("/subscriptions/confirm", web::get().to(confirm::<SS>))
-            .route("/subscriptions/unsubscribe", web::get().to(unsubscribe))
+            .route(
+                "/subscriptions/unsubscribe",
+                web::get().to(unsubscribe::<SS>),
+            )
             //.route("/newsletters", web::post().to(publish_newsletter))
             .app_data(state.clone())
     })

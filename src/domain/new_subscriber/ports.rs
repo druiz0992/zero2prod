@@ -25,6 +25,8 @@ pub trait SubscriberRepository: Send + Sync + 'static {
         &self,
         token: &SubscriptionToken,
     ) -> Result<NewSubscriber, SubscriberRepositoryError>;
+
+    async fn delete(&self, subscriber: NewSubscriber) -> Result<(), SubscriberRepositoryError>;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -56,6 +58,11 @@ pub trait SubscriptionService: Send + Sync + 'static {
     ) -> Result<NewSubscriber, SubscriptionServiceError>;
 
     async fn confirm(
+        &self,
+        req: SubscriptionTokenRequest,
+    ) -> Result<NewSubscriber, SubscriptionServiceError>;
+
+    async fn delete(
         &self,
         req: SubscriptionTokenRequest,
     ) -> Result<NewSubscriber, SubscriptionServiceError>;

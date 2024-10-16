@@ -28,7 +28,7 @@ async fn subscribe_persists_the_new_subscriber() {
     let app = spawn_app().await;
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
     let subscriber_request: NewSubscriberRequest = serde_urlencoded::from_str(body).unwrap();
-    let token = SubscriptionToken::new();
+    let token = SubscriptionToken::default();
 
     Mock::given(path("/email"))
         .and(method("POST"))

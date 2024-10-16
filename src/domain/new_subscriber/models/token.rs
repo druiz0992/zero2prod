@@ -75,6 +75,12 @@ impl TryFrom<String> for SubscriptionToken {
     }
 }
 
+impl Default for SubscriptionToken {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn is_alphanumeric(token: &str) -> bool {
     token.chars().all(|c| c.is_alphanumeric())
 }

@@ -1,8 +1,4 @@
 //mod newsletters;
-mod unsubscribe;
-
-//pub use newsletters::*;
-pub use unsubscribe::unsubscribe;
 
 use crate::domain::new_subscriber::models::token::SubscriptionToken;
 use sqlx::PgPool;

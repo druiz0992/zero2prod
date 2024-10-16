@@ -41,7 +41,7 @@ where
         &self,
         subscriber_request: NewSubscriberRequest,
     ) -> Result<NewSubscriber, SubscriptionServiceError> {
-        let subscription_token = SubscriptionToken::new();
+        let subscription_token = SubscriptionToken::default();
         let (subscriber, token) = self
             .repo
             .retrieve_or_insert(subscriber_request, subscription_token)
@@ -62,10 +62,28 @@ where
     ) -> Result<NewSubscriber, SubscriptionServiceError> {
         let subscription_token = SubscriptionTokenRequest::try_into(req)?;
 
-        let subscriber = self.repo.retrieve_from_token(&subscription_token).await?;
+        let mut subscriber = self.repo.retrieve_from_token(&subscription_token).await?;
 
-        let subscriber = subscriber.with_status(SubscriberStatus::SubscriptionConfirmed);
+        subscriber = subscriber.with_status(SubscriberStatus::SubscriptionConfirmed);
         self.repo.update(subscriber.clone()).await?;
+        Ok(subscriber)
+    }
+
+    async fn delete(
+        &self,
+        req: SubscriptionTokenRequest,
+    ) -> Result<NewSubscriber, SubscriptionServiceError> {
+        let subscription_token = SubscriptionTokenRequest::try_into(req)?;
+
+        let mut subscriber = self.repo.retrieve_from_token(&subscription_token).await?;
+
+        if subscriber.status == SubscriberStatus::SubscriptionPendingConfirmation {
+            self.repo.delete(subscriber.clone()).await?;
+        } else {
+            subscriber = subscriber.with_status(SubscriberStatus::CancellationPendingConfirmation);
+            self.repo.update(subscriber.clone()).await?;
+        }
+
         Ok(subscriber)
     }
 }
