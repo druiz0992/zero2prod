@@ -6,14 +6,16 @@ use std::sync::Arc;
 use uuid::Uuid;
 use wiremock::MockServer;
 use zero2prod::domain::new_subscriber::service::Subscription;
+use zero2prod::inbound::http::Application;
 use zero2prod::outbound::db::postgres_db::PostgresDb;
+use zero2prod::outbound::subscription_notifier::email_client::EmailClient;
 use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
-    startup::{get_connection_pool, Application},
-    telemetry::{get_subscriber, init_subscriber},
+    outbound::telemetry::init_logger,
 };
 
 pub struct TestUser {
+    #[allow(dead_code)]
     pub user_id: Uuid,
     pub username: String,
     pub password: String,
@@ -28,6 +30,7 @@ impl TestUser {
         }
     }
 
+    #[allow(dead_code)]
     async fn store(&self, pool: &PgPool) {
         let salt = SaltString::generate(&mut rand::thread_rng());
         let password_hash = Argon2::new(
@@ -59,7 +62,7 @@ pub struct ConfirmationLinks {
 pub struct TestApp {
     pub address: String,
     #[allow(dead_code)]
-    pub subscription_service: Box<Subscription<PostgresDb>>,
+    pub subscription_service: Arc<Subscription<PostgresDb, EmailClient>>,
     pub email_server: MockServer,
     pub port: u16,
     pub test_user: TestUser,
@@ -128,11 +131,9 @@ static TRACING: Lazy<()> = Lazy::new(|| {
     let default_filter_level = c.general.log_level;
     let subscriber_name = "test".to_string();
     if std::env::var("TEST_LOG").is_ok() {
-        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
-        init_subscriber(subscriber);
+        init_logger(&subscriber_name, &default_filter_level, std::io::stdout);
     } else {
-        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::sink);
-        init_subscriber(subscriber);
+        init_logger(&subscriber_name, &default_filter_level, std::io::sink);
     }
 });
 
@@ -149,13 +150,16 @@ pub async fn spawn_app() -> TestApp {
 
     configure_database(&configuration.database).await;
 
-    let application = Application::build(configuration.clone())
+    let email_client = EmailClient::new(configuration.email_client);
+    let subscription_repo = PostgresDb::new(&configuration.database);
+    let subscription_service = Subscription::new(subscription_repo, email_client);
+
+    let application = Application::build(subscription_service, configuration.application.clone())
         .await
         .expect("Failed to build application");
     let application_port = application.port();
+    let subscription_service = application.subscription_service();
     let _ = tokio::spawn(application.run_until_stopped());
-    let subscription_repo = PostgresDb::new(&configuration.database);
-    let subscription_service = Box::new(Subscription::new(subscription_repo));
 
     let test_app = TestApp {
         address: format!("http://localhost:{}", application_port),

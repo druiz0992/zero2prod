@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use crate::domain::new_subscriber::models::token::SubscriptionToken;
 use crate::domain::newsletter::models::newsletter::{Newsletter, NewsletterBody};
+use crate::outbound::telemetry::spawn_blocking_with_tracing;
 use crate::routes::get_token_from_subscriber_id;
-use crate::telemetry::spawn_blocking_with_tracing;
 use crate::{domain::new_subscriber::models::email::SubscriberEmail, email_client::EmailClient};
 use actix_web::http::header::HeaderMap;
 use actix_web::{web, HttpRequest, HttpResponse};

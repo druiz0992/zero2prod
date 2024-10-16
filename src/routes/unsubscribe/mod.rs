@@ -1,6 +1,6 @@
 mod errors;
 
-use crate::domain::new_subscriber::models::token::SubscriptionToken;
+use crate::domain::new_subscriber::models::token::{SubscriptionToken, SubscriptionTokenError};
 use actix_web::{web, HttpResponse};
 use errors::*;
 use sqlx::PgPool;
@@ -11,7 +11,7 @@ pub struct UnsubscribeParameters {
 }
 
 impl TryFrom<UnsubscribeParameters> for SubscriptionToken {
-    type Error = String;
+    type Error = SubscriptionTokenError;
     fn try_from(value: UnsubscribeParameters) -> Result<Self, Self::Error> {
         let token = SubscriptionToken::parse(value.token)?;
         Ok(token)
@@ -25,7 +25,7 @@ pub async fn unsubscribe(
     let _unsubscribe_token: SubscriptionToken = parameters
         .0
         .try_into()
-        .map_err(UnsubscribeError::ValidationError)?;
+        .map_err(|e| UnsubscribeError::ValidationError(e))?;
     // retrieve subscriber from token. If it doesnt exist (token or subscriber), raise error
     // render HTML page confirming unsubscription that redirects to DELETE /subsriptions
     Ok(HttpResponse::Ok().finish())

@@ -2,42 +2,45 @@ use async_trait::async_trait;
 
 use super::{
     models::{
-        subscriber::{self, NewSubscriber, NewSubscriberRequest, SubscriberStatus},
+        subscriber::{NewSubscriber, NewSubscriberRequest, SubscriberStatus},
         token::SubscriptionToken,
+        token::SubscriptionTokenRequest,
     },
-    ports::{SubscriptionRepository, SubscriptionService},
+    ports::{
+        SubscriberRepository, SubscriptionNotifier, SubscriptionService, SubscriptionServiceError,
+    },
 };
-use crate::email_client::EmailClient;
-use anyhow::Context;
 
 #[derive(Debug)]
-pub struct Subscription<R>
+pub struct Subscription<R, N>
 where
-    R: SubscriptionRepository,
+    R: SubscriberRepository,
+    N: SubscriptionNotifier,
 {
     pub repo: R,
+    pub notifier: N,
 }
 
-impl<R> Subscription<R>
+impl<R, N> Subscription<R, N>
 where
-    R: SubscriptionRepository,
+    R: SubscriberRepository,
+    N: SubscriptionNotifier,
 {
-    pub fn new(repo: R) -> Self {
-        Self { repo }
+    pub fn new(repo: R, notifier: N) -> Self {
+        Self { repo, notifier }
     }
 }
 
 #[async_trait]
-impl<R> SubscriptionService for Subscription<R>
+impl<R, N> SubscriptionService for Subscription<R, N>
 where
-    R: SubscriptionRepository,
+    R: SubscriberRepository,
+    N: SubscriptionNotifier,
 {
     async fn new_subscriber(
         &self,
         subscriber_request: NewSubscriberRequest,
-        email_client: &EmailClient,
-        base_url: &str,
-    ) -> Result<NewSubscriber, anyhow::Error> {
+    ) -> Result<NewSubscriber, SubscriptionServiceError> {
         let subscription_token = SubscriptionToken::new();
         let (subscriber, token) = self
             .repo
@@ -45,39 +48,24 @@ where
             .await?;
 
         if subscriber.status == SubscriberStatus::SubscriptionPendingConfirmation {
-            send_confirmation_email(&email_client, &subscriber, &base_url, &token.as_ref())
-                .await
-                .context("Failed to send a confirmation email")?;
+            let message = self.notifier.build_notification(token)?;
+            self.notifier
+                .send_notification(&subscriber.email, &message)
+                .await?
         }
         Ok(subscriber)
     }
-}
 
-#[tracing::instrument(
-    name = "Send a confirmation email to a new subscriber",
-    skip(email_client, new_subscriber, base_url)
-)]
-pub async fn send_confirmation_email(
-    email_client: &EmailClient,
-    new_subscriber: &NewSubscriber,
-    base_url: &str,
-    subscription_token: &str,
-) -> Result<(), reqwest::Error> {
-    let confirmation_link = format!(
-        "{}/subscriptions/confirm?subscription_token={}",
-        base_url, subscription_token
-    );
-    let plain_body = &format!(
-        "Welcome to our newsletter!<br />\
-            Click <a href=\"{}\">here</a> to confirm your subscription.",
-        confirmation_link
-    );
-    let html_body = &format!(
-        "Welcome to our newsletter!\nClick here {} to confirm your subscription.",
-        confirmation_link
-    );
+    async fn confirm(
+        &self,
+        req: SubscriptionTokenRequest,
+    ) -> Result<NewSubscriber, SubscriptionServiceError> {
+        let subscription_token = SubscriptionTokenRequest::try_into(req)?;
 
-    email_client
-        .send_email(&new_subscriber.email, "Welcome", html_body, plain_body)
-        .await
+        let subscriber = self.repo.retrieve_from_token(&subscription_token).await?;
+
+        let subscriber = subscriber.with_status(SubscriberStatus::SubscriptionConfirmed);
+        self.repo.update(subscriber.clone()).await?;
+        Ok(subscriber)
+    }
 }

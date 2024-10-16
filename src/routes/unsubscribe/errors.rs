@@ -1,10 +1,12 @@
-use crate::routes::error_chain_fmt;
+use crate::{
+    domain::new_subscriber::models::token::SubscriptionTokenError, routes::error_chain_fmt,
+};
 use actix_web::{http::StatusCode, ResponseError};
 
 #[derive(thiserror::Error)]
 pub enum UnsubscribeError {
     #[error("{0}")]
-    ValidationError(String),
+    ValidationError(#[from] SubscriptionTokenError),
 }
 
 impl std::fmt::Debug for UnsubscribeError {

@@ -1,22 +1,61 @@
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
+pub enum SubscriptionTokenError {
+    #[error(
+        "Subscription token length is too long (maximum allowed is {} characters)",
+        SubscriptionToken::MAX_LENGTH
+    )]
+    TooLong,
+    #[error(
+        "Subscription token length is too short (minimum allowed is {} characters)",
+        SubscriptionToken::MIN_LENGTH
+    )]
+    TooShort,
+    #[error("Subscriber name contains forbidden characters: {0}")]
+    ContainsForbiddenCharacters(String),
+}
+
+#[derive(serde::Deserialize, Debug)]
+pub struct SubscriptionTokenRequest {
+    pub subscription_token: String,
+}
+
+impl TryFrom<SubscriptionTokenRequest> for SubscriptionToken {
+    type Error = SubscriptionTokenError;
+    fn try_from(value: SubscriptionTokenRequest) -> Result<Self, Self::Error> {
+        SubscriptionToken::parse(value.subscription_token)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SubscriptionToken(String);
 
 impl SubscriptionToken {
-    pub fn parse(s: String) -> Result<SubscriptionToken, String> {
-        if validate_token(&s) {
-            Ok(Self(s))
-        } else {
-            Err(format!("{} is no a valid subscription token", s))
+    const MAX_LENGTH: usize = 40;
+    const MIN_LENGTH: usize = 20;
+    const DEFAULT_LENGTH: usize = 25;
+
+    pub fn parse(s: String) -> Result<SubscriptionToken, SubscriptionTokenError> {
+        if s.len() > Self::MAX_LENGTH {
+            return Err(SubscriptionTokenError::TooLong);
         }
+        if s.len() < Self::MIN_LENGTH {
+            return Err(SubscriptionTokenError::TooShort);
+        }
+        if !is_alphanumeric(&s) {
+            return Err(SubscriptionTokenError::ContainsForbiddenCharacters(
+                s.clone(),
+            ));
+        }
+        Ok(Self(s))
     }
 
     pub fn new() -> Self {
         let mut rng = thread_rng();
         let token = std::iter::repeat_with(|| rng.sample(Alphanumeric))
             .map(char::from)
-            .take(25)
+            .take(SubscriptionToken::DEFAULT_LENGTH)
             .collect();
         SubscriptionToken::parse(token).unwrap()
     }
@@ -29,20 +68,11 @@ impl AsRef<str> for SubscriptionToken {
 }
 
 impl TryFrom<String> for SubscriptionToken {
-    type Error = String;
+    type Error = SubscriptionTokenError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         SubscriptionToken::parse(value)
     }
-}
-
-fn validate_token(token: &str) -> bool {
-    // alphanumeric characters only
-    let alphanumeric_token = is_alphanumeric(token);
-    // length between 20 and 40
-    let correct_length = token.len() > 20 && token.len() < 40;
-
-    alphanumeric_token && correct_length
 }
 
 fn is_alphanumeric(token: &str) -> bool {
@@ -62,13 +92,13 @@ mod tests {
 
     #[test]
     fn short_token_is_invalid() {
-        let token = "a".repeat(20);
+        let token = "a".repeat(19);
         assert_err!(SubscriptionToken::parse(token));
     }
 
     #[test]
     fn long_token_is_invalid() {
-        let token = "a".repeat(40);
+        let token = "a".repeat(41);
         assert_err!(SubscriptionToken::parse(token));
     }
 

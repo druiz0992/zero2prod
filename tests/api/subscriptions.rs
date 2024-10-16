@@ -1,13 +1,12 @@
 use crate::helpers::spawn_app;
-use serde::Deserialize;
 use serde_urlencoded;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 use zero2prod::domain::new_subscriber::models::subscriber::{
-    NewSubscriber, NewSubscriberError, NewSubscriberRequest, SubscriberStatus,
+    NewSubscriberRequest, SubscriberStatus,
 };
 use zero2prod::domain::new_subscriber::models::token::SubscriptionToken;
-use zero2prod::domain::new_subscriber::ports::SubscriptionRepository;
+use zero2prod::domain::new_subscriber::ports::SubscriberRepository;
 
 #[tokio::test]
 async fn subscribe_returns_200_for_valid_form_data() {
@@ -159,8 +158,13 @@ async fn subscribe_fails_if_there_is_a_fatal_database_error() {
     // Arrange
     let app = spawn_app().await;
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
-    // Sabotage the database
-    app.subscription_service.repo.drop_column("email").await;
+    // Sabotage the db
+    let pool = app.subscription_service.repo.pool();
+    sqlx::query!("ALTER TABLE subscriptions DROP COLUMN email;",)
+        .execute(pool)
+        .await
+        .unwrap();
+
     // Act
     let response = app.post_subscriptions(body.into()).await;
     // Assert

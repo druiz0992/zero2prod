@@ -1,13 +1,11 @@
 use crate::configuration::DatabaseSettings;
-use crate::domain::new_subscriber::models::name::SubscriberName;
-use crate::domain::new_subscriber::models::subscriber::NewSubscriberRequest;
-use crate::domain::new_subscriber::models::subscriber::{
-    NewSubscriberError, SubscriberId, SubscriberStatus,
+use crate::domain::new_subscriber::{
+    models::{
+        subscriber::{NewSubscriber, NewSubscriberRequest, SubscriberId, SubscriberStatus},
+        token::SubscriptionToken,
+    },
+    ports::{SubscriberRepository, SubscriberRepositoryError},
 };
-use crate::domain::new_subscriber::models::{
-    email::SubscriberEmail, subscriber::NewSubscriber, token::SubscriptionToken,
-};
-use crate::domain::new_subscriber::ports::SubscriptionRepository;
 use anyhow::Context;
 use async_trait::async_trait;
 use chrono::Utc;
@@ -28,6 +26,11 @@ impl PostgresDb {
         }
     }
 
+    // TODO: This is only for testing
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
+
     #[tracing::instrument(
         name = "Checking if user is already subscribed",
         skip(self, subscriber)
@@ -35,56 +38,42 @@ impl PostgresDb {
     async fn get_subscriber(
         &self,
         subscriber: NewSubscriber,
-    ) -> Result<NewSubscriber, anyhow::Error> {
+    ) -> Result<NewSubscriber, SubscriberRepositoryError> {
         let record = sqlx::query!(
             "SELECT id, email, name, status FROM subscriptions WHERE email = $1",
             subscriber.email.as_ref()
         )
         .fetch_optional(&self.pool)
         .await
-        .expect("Failed to fetch saved subscription.");
+        .map_err(|e| SubscriberRepositoryError::Unexpected(anyhow::Error::from(e)))?;
 
         let (id, status) = match record {
-            Some(existing_subscriber) => (
-                Some(existing_subscriber.id),
-                SubscriberStatus::parse(&existing_subscriber.status).unwrap(),
-            ),
+            Some(existing_subscriber) if existing_subscriber.name == subscriber.name.as_ref() => {
+                let parsed_status = SubscriberStatus::parse(&existing_subscriber.status)?;
 
-            None => (None, SubscriberStatus::NotInserted),
+                if existing_subscriber.name != subscriber.name.as_ref() {
+                    return Err(SubscriberRepositoryError::SubscriberNotFound);
+                }
+                (Some(existing_subscriber.id), parsed_status)
+            }
+
+            _ => (None, SubscriberStatus::NotInserted),
         };
 
-        Ok(NewSubscriber {
-            id,
-            email: subscriber.email,
-            name: subscriber.name,
-            status,
-        })
-    }
-
-    // TODO: This is only for testing
-    pub async fn drop_column(&self, column: &str) {
-        if column == "email" {
-            sqlx::query!("ALTER TABLE subscriptions DROP COLUMN email;",)
-                .execute(&self.pool)
-                .await
-                .unwrap();
-        } else {
-            sqlx::query!("ALTER TABLE subscription_tokens DROP COLUMN subscription_token;",)
-                .execute(&self.pool)
-                .await
-                .unwrap();
-        }
+        Ok(NewSubscriber::build(subscriber.name, subscriber.email)
+            .with_id(id)
+            .with_status(status))
     }
 
     #[tracing::instrument(
         name = "Saving new subscriber details in db",
         skip(new_subscriber, transaction)
     )]
-    async fn insert_subscriber(
+    async fn insert_new(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        new_subscriber: &NewSubscriber,
-    ) -> Result<NewSubscriber, sqlx::Error> {
+        new_subscriber: NewSubscriber,
+    ) -> Result<NewSubscriber, SubscriberRepositoryError> {
         let subscriber_id = uuid::Uuid::new_v4();
         let query = sqlx::query!(
             r#"
@@ -97,16 +86,14 @@ impl PostgresDb {
             Utc::now(),
             String::from(SubscriberStatus::SubscriptionPendingConfirmation)
         );
-        transaction.execute(query).await?;
+        transaction
+            .execute(query)
+            .await
+            .map_err(|e| SubscriberRepositoryError::Unexpected(anyhow::Error::from(e)))?;
 
-        let new_subscriber = NewSubscriber {
-            id: Some(subscriber_id),
-            email: new_subscriber.email.clone(),
-            name: new_subscriber.name.clone(),
-            status: SubscriberStatus::SubscriptionPendingConfirmation,
-        };
-
-        Ok(new_subscriber)
+        Ok(new_subscriber
+            .with_id(Some(subscriber_id))
+            .with_status(SubscriberStatus::SubscriptionPendingConfirmation))
     }
 
     #[tracing::instrument(
@@ -116,8 +103,8 @@ impl PostgresDb {
     async fn store_token(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        subscriber_id: SubscriberId,
         subscription_token: &SubscriptionToken,
+        subscriber_id: SubscriberId,
     ) -> Result<(), sqlx::Error> {
         let query = sqlx::query!(
             r#"INSERT INTO subscription_tokens (subscription_token, subscriber_id)
@@ -133,16 +120,17 @@ impl PostgresDb {
     async fn get_token_from_subscriber_id(
         &self,
         subscriber_id: uuid::Uuid,
-    ) -> Result<SubscriptionToken, anyhow::Error> {
+    ) -> Result<SubscriptionToken, SubscriberRepositoryError> {
         let result = sqlx::query!(
             r#"SELECT subscription_token FROM subscription_tokens WHERE  subscriber_id= $1"#,
             subscriber_id
         )
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| SubscriberRepositoryError::Unexpected(anyhow::Error::from(e)))?;
 
         SubscriptionToken::try_from(result.subscription_token)
-            .map_err(|e| anyhow::Error::msg(format!("{}", e)))
+            .map_err(SubscriberRepositoryError::from)
     }
 
     #[tracing::instrument(name = "Get subscriber_id from token", skip(self, subscription_token))]
@@ -156,7 +144,32 @@ impl PostgresDb {
         )
         .fetch_optional(&self.pool)
         .await?;
+
         Ok(result.map(|r| r.subscriber_id))
+    }
+
+    #[tracing::instrument(name = "Get subscriber from subscriber_id", skip(self, id))]
+    pub async fn get_subscriber_from_id(
+        &self,
+        id: uuid::Uuid,
+    ) -> Result<NewSubscriber, SubscriberRepositoryError> {
+        let result = sqlx::query!(
+            "SELECT  email, name, status FROM subscriptions WHERE id = $1",
+            id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| SubscriberRepositoryError::Unexpected(anyhow::Error::from(e)))?;
+
+        let subscriber_request = NewSubscriberRequest {
+            email: result.email,
+            name: result.name,
+        };
+        let subscriber: NewSubscriber = subscriber_request.try_into()?;
+
+        let status = SubscriberStatus::parse(&result.status)?;
+
+        Ok(subscriber.with_id(Some(id)).with_status(status))
     }
 
     #[tracing::instrument(name = "Mark subscriber as confirmed", skip(subscriber_id, self))]
@@ -168,12 +181,13 @@ impl PostgresDb {
         )
         .execute(&self.pool)
         .await?;
+
         Ok(())
     }
 }
 
 #[async_trait]
-impl SubscriptionRepository for PostgresDb {
+impl SubscriberRepository for PostgresDb {
     #[tracing::instrument(
         name = "Adding a new subscriber",
         skip(self, subscriber_request, token)
@@ -182,11 +196,10 @@ impl SubscriptionRepository for PostgresDb {
         &self,
         subscriber_request: NewSubscriberRequest,
         token: SubscriptionToken,
-    ) -> Result<(NewSubscriber, SubscriptionToken), anyhow::Error> {
+    ) -> Result<(NewSubscriber, SubscriptionToken), SubscriberRepositoryError> {
         let mut new_token = token;
-        let mut new_subscriber: NewSubscriber = subscriber_request
-            .try_into()
-            .map_err(|_| NewSubscriberError::InvalidEmail("WWW".into()))?;
+        let mut new_subscriber: NewSubscriber = subscriber_request.try_into()?;
+
         new_subscriber = self
             .get_subscriber(new_subscriber)
             .await
@@ -205,10 +218,11 @@ impl SubscriptionRepository for PostgresDb {
                 .context("Failed to acquire a Postgress connection from the pool")?;
 
             new_subscriber = self
-                .insert_subscriber(&mut transaction, &new_subscriber)
+                .insert_new(&mut transaction, new_subscriber)
                 .await
                 .context("Failed to insert a new subscriber in the database")?;
-            self.store_token(&mut transaction, new_subscriber.id, &new_token)
+
+            self.store_token(&mut transaction, &new_token, new_subscriber.id)
                 .await
                 .context("Failed to store the confirmation token for a new subscriber.")?;
 
@@ -218,5 +232,45 @@ impl SubscriptionRepository for PostgresDb {
                 .context("Failed to commit SQL transaction to store a new subscriber")?;
         }
         Ok((new_subscriber, new_token))
+    }
+
+    #[tracing::instrument(name = "Update subscriber", skip(subscriber, self))]
+    async fn update(&self, subscriber: NewSubscriber) -> Result<(), SubscriberRepositoryError> {
+        let result = sqlx::query!(
+            r#"UPDATE subscriptions SET email = $1, name = $2, status = $3 WHERE id = $4"#,
+            subscriber.email.as_ref(),
+            subscriber.name.as_ref(),
+            String::from(subscriber.status),
+            subscriber.id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| SubscriberRepositoryError::Unexpected(anyhow::Error::from(e)))
+        .context("Failed to update subscriber to database")?;
+
+        if result.rows_affected() == 0 {
+            return Err(SubscriberRepositoryError::SubscriberNotFound);
+        }
+
+        Ok(())
+    }
+
+    #[tracing::instrument(name = "Retrieve subscriber from token", skip(token, self))]
+    async fn retrieve_from_token(
+        &self,
+        token: &SubscriptionToken,
+    ) -> Result<NewSubscriber, SubscriberRepositoryError> {
+        let id = self
+            .get_subscriber_id_from_token(token)
+            .await
+            .map_err(|e| SubscriberRepositoryError::Unexpected(anyhow::Error::from(e)))?
+            .ok_or_else(|| SubscriberRepositoryError::UnknownToken)?;
+
+        let subscriber = self
+            .get_subscriber_from_id(id)
+            .await
+            .context("Failed retrieving subscriber from a given subscriber id")?;
+
+        Ok(subscriber)
     }
 }

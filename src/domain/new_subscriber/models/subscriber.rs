@@ -1,5 +1,5 @@
-use super::email::SubscriberEmail;
-use super::name::SubscriberName;
+use super::email::{EmailError, SubscriberEmail};
+use super::name::{SubscriberName, SubscriberNameError};
 
 #[derive(serde::Deserialize)]
 pub struct NewSubscriberRequest {
@@ -18,7 +18,7 @@ impl NewSubscriberRequest {
 
 pub type SubscriberId = Option<uuid::Uuid>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NewSubscriber {
     pub id: SubscriberId,
     pub email: SubscriberEmail,
@@ -26,7 +26,13 @@ pub struct NewSubscriber {
     pub status: SubscriberStatus,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(thiserror::Error, Debug)]
+pub enum SubscriberStatusError {
+    #[error("Unknown subscriber status: {0}")]
+    UnknownStatus(String),
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum SubscriberStatus {
     NotInserted,
     SubscriptionPendingConfirmation,
@@ -36,11 +42,24 @@ pub enum SubscriberStatus {
 }
 
 impl SubscriberStatus {
-    pub fn parse(status: &str) -> Result<SubscriberStatus, String> {
+    const SUBSCRIPTION_PENDING_CONFIRMATION: &'static str = "pending_confirmation";
+    const SUBSCRIPTION_CONFIRMED: &'static str = "confirmed";
+    const SUBSCRIBER_NOT_INSERTED: &'static str = "not_inserted";
+    const CANCELLATION_PENDING_CONFIRMATION: &'static str = "cancellation_pending";
+    const CANCELLATION_CONFIRMED: &'static str = "cancellation_confirmed";
+
+    pub fn parse(status: &str) -> Result<SubscriberStatus, SubscriberStatusError> {
         match status {
-            "pending_confirmation" => Ok(SubscriberStatus::SubscriptionPendingConfirmation),
-            "confirmed" => Ok(SubscriberStatus::SubscriptionConfirmed),
-            _ => Err("Unknown status".into()),
+            Self::SUBSCRIPTION_PENDING_CONFIRMATION => {
+                Ok(SubscriberStatus::SubscriptionPendingConfirmation)
+            }
+            Self::SUBSCRIPTION_CONFIRMED => Ok(SubscriberStatus::SubscriptionConfirmed),
+            Self::SUBSCRIBER_NOT_INSERTED => Ok(SubscriberStatus::NotInserted),
+            Self::CANCELLATION_PENDING_CONFIRMATION => {
+                Ok(SubscriberStatus::CancellationPendingConfirmation)
+            }
+            Self::CANCELLATION_CONFIRMED => Ok(SubscriberStatus::CancellationConfirmed),
+            _ => Err(SubscriberStatusError::UnknownStatus(status.into())),
         }
     }
 }
@@ -48,22 +67,29 @@ impl SubscriberStatus {
 impl From<SubscriberStatus> for String {
     fn from(value: SubscriberStatus) -> Self {
         match value {
-            SubscriberStatus::NotInserted => "not_inserted".into(),
-            SubscriberStatus::SubscriptionPendingConfirmation => "pending_confirmation".into(),
-            SubscriberStatus::SubscriptionConfirmed => "confirmed".into(),
-            SubscriberStatus::CancellationPendingConfirmation => "cancellation_pending".into(),
-            SubscriberStatus::CancellationConfirmed => "cancellation_confirmed".into(),
+            SubscriberStatus::NotInserted => SubscriberStatus::SUBSCRIBER_NOT_INSERTED.into(),
+            SubscriberStatus::SubscriptionPendingConfirmation => {
+                SubscriberStatus::SUBSCRIPTION_PENDING_CONFIRMATION.into()
+            }
+            SubscriberStatus::SubscriptionConfirmed => {
+                SubscriberStatus::SUBSCRIPTION_CONFIRMED.into()
+            }
+            SubscriberStatus::CancellationPendingConfirmation => {
+                SubscriberStatus::CANCELLATION_PENDING_CONFIRMATION.into()
+            }
+            SubscriberStatus::CancellationConfirmed => {
+                SubscriberStatus::CANCELLATION_CONFIRMED.into()
+            }
         }
     }
 }
-#[derive(thiserror::Error, Debug, PartialEq)]
+
+#[derive(thiserror::Error, Debug)]
 pub enum NewSubscriberError {
-    #[error("Invalid name: {0}")]
-    InvalidName(String),
-    #[error("Invalid email: {0}")]
-    InvalidEmail(String),
-    #[error("Duplicated email: {0}")]
-    DuplicatedEmail(String),
+    #[error("Invalid subscriber name: {0}")]
+    InvalidName(#[from] SubscriberNameError),
+    #[error("Invalid subscriber email: {0}")]
+    InvalidEmail(#[from] EmailError),
 }
 
 impl NewSubscriber {
@@ -74,6 +100,23 @@ impl NewSubscriber {
             name: SubscriberName::parse(req.name).map_err(NewSubscriberError::InvalidName)?,
             status: SubscriberStatus::NotInserted,
         })
+    }
+
+    pub fn build(name: SubscriberName, email: SubscriberEmail) -> NewSubscriber {
+        Self {
+            id: None,
+            status: SubscriberStatus::NotInserted,
+            name,
+            email,
+        }
+    }
+
+    pub fn with_id(self, id: SubscriberId) -> Self {
+        Self { id, ..self }
+    }
+
+    pub fn with_status(self, status: SubscriberStatus) -> Self {
+        Self { status, ..self }
     }
 }
 

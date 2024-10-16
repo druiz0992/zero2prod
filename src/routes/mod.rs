@@ -1,13 +1,7 @@
-mod health_check;
-mod newsletters;
-mod subscriptions;
-mod subscriptions_confirm;
+//mod newsletters;
 mod unsubscribe;
 
-pub use health_check::*;
-pub use newsletters::*;
-pub use subscriptions::subscribe;
-pub use subscriptions_confirm::confirm;
+//pub use newsletters::*;
 pub use unsubscribe::unsubscribe;
 
 use crate::domain::new_subscriber::models::token::SubscriptionToken;
