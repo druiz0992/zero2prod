@@ -3,8 +3,6 @@ use futures::stream::{self, StreamExt};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 use zero2prod::domain::new_subscriber::models::subscriber::SubscriberStatus;
-use zero2prod::domain::new_subscriber::models::token::SubscriptionToken;
-use zero2prod::domain::new_subscriber::ports::SubscriberRepository;
 
 #[tokio::test]
 async fn confirmation_without_token_is_rejected_with_a_400() {
@@ -90,32 +88,13 @@ async fn clicking_on_the_confirmation_link_confirms_a_subscriber() {
         .await;
 
     app.post_subscriptions(body.into()).await;
-    let email_request = &app.email_server.received_requests().await.unwrap()[0];
-    let confirmation_links = app.get_confirmation_links(&email_request);
-    let token = confirmation_links
-        .html
-        .query()
-        .unwrap()
-        .split("=")
-        .nth(1)
-        .unwrap();
-    let token = SubscriptionToken::parse(token.into()).unwrap();
-
-    reqwest::get(confirmation_links.html)
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
-    let saved = app
-        .subscription_service
-        .repo
-        .retrieve_from_token(&token)
-        .await
-        .expect("Failed to fetch saved subscription.");
-
-    assert_eq!(saved.name.as_ref(), "le guin");
-    assert_eq!(saved.email.as_ref(), "ursula_le_guin@gmail.com");
-    assert_eq!(saved.status, SubscriberStatus::SubscriptionConfirmed);
+    if let Some((subscriber, _)) = app.confirm_subscription().await {
+        assert_eq!(subscriber.name.as_ref(), "le guin");
+        assert_eq!(subscriber.email.as_ref(), "ursula_le_guin@gmail.com");
+        assert_eq!(subscriber.status, SubscriberStatus::SubscriptionConfirmed);
+    } else {
+        panic!("Subscription wasnt confirmed")
+    }
 }
 
 #[tokio::test]
@@ -130,38 +109,16 @@ async fn clicking_on_the_confirmation_link_twice_confirms_a_subscriber() {
         .await;
 
     app.post_subscriptions(body.into()).await;
-    let email_request = &app.email_server.received_requests().await.unwrap()[0];
-    let confirmation_links = app.get_confirmation_links(&email_request);
-
-    reqwest::get(confirmation_links.html.clone())
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
-    reqwest::get(confirmation_links.html.clone())
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
-
-    let token = confirmation_links
-        .html
-        .query()
-        .unwrap()
-        .split("=")
-        .nth(1)
-        .unwrap();
-    let token = SubscriptionToken::parse(token.into()).unwrap();
-    let saved = app
-        .subscription_service
-        .repo
-        .retrieve_from_token(&token)
-        .await
-        .expect("Failed to fetch saved subscription.");
-
-    assert_eq!(saved.name.as_ref(), "le guin");
-    assert_eq!(saved.email.as_ref(), "ursula_le_guin@gmail.com");
-    assert_eq!(saved.status, SubscriberStatus::SubscriptionConfirmed);
+    if app.confirm_subscription().await.is_none() {
+        panic!("Subscription wasn't confirmed the first time ")
+    }
+    if let Some((subscriber, _)) = app.confirm_subscription().await {
+        assert_eq!(subscriber.name.as_ref(), "le guin");
+        assert_eq!(subscriber.email.as_ref(), "ursula_le_guin@gmail.com");
+        assert_eq!(subscriber.status, SubscriberStatus::SubscriptionConfirmed);
+    } else {
+        panic!("Subscription wasnt confirmed the second time")
+    }
 }
 
 #[tokio::test]

@@ -4,7 +4,7 @@ use crate::domain::new_subscriber::{
 use crate::inbound::http::{AppError, ApplicationState};
 use actix_web::{web, HttpResponse};
 
-#[tracing::instrument(name = "Removing a subscriber", skip(state, req))]
+#[tracing::instrument(name = "Deleting a subscriber", skip(state, req))]
 pub async fn unsubscribe<SS: SubscriptionService>(
     state: web::Data<ApplicationState<SS>>,
     req: web::Query<SubscriptionTokenRequest>,

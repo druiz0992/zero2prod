@@ -77,7 +77,7 @@ where
 
         let mut subscriber = self.repo.retrieve_from_token(&subscription_token).await?;
 
-        if subscriber.status == SubscriberStatus::SubscriptionPendingConfirmation {
+        if subscriber.status == SubscriberStatus::CancellationPendingConfirmation {
             self.repo.delete(subscriber.clone()).await?;
         } else {
             subscriber = subscriber.with_status(SubscriberStatus::CancellationPendingConfirmation);

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "ALTER TABLE subscription_tokens DROP CONSTRAINT subscription_tokens_subscriber_id_fkey;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "cae5ec6bf80cba7542cff57273dfd6e8db7c67e3bfeda23e944cb4b4b2d024f4"
+}

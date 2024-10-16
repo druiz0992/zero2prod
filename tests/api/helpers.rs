@@ -5,10 +5,15 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::sync::Arc;
 use uuid::Uuid;
 use wiremock::MockServer;
-use zero2prod::domain::new_subscriber::service::Subscription;
+use zero2prod::domain::new_subscriber::{
+    models::{subscriber::NewSubscriber, token::SubscriptionToken},
+    ports::SubscriberRepository,
+    service::Subscription,
+};
 use zero2prod::inbound::http::Application;
-use zero2prod::outbound::db::postgres_db::PostgresDb;
-use zero2prod::outbound::subscription_notifier::email_client::EmailClient;
+use zero2prod::outbound::{
+    db::postgres_db::PostgresDb, subscription_notifier::email_client::EmailClient,
+};
 use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
     outbound::telemetry::init_logger,
@@ -79,6 +84,16 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
+    pub async fn get_subscription_unsubscribe(&self, token: String) -> reqwest::Response {
+        reqwest::Client::new()
+            .get(&format!("{}/subscriptions/unsubscribe", &self.address))
+            .query(&[("subscription_token", token.as_str())])
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .send()
+            .await
+            .expect("Failed to execute unsubscription request.")
+    }
+
     pub fn get_confirmation_links(&self, email_requests: &wiremock::Request) -> ConfirmationLinks {
         let body: serde_json::Value = serde_json::from_slice(&email_requests.body).unwrap();
         let get_link = |s: &str| {
@@ -123,6 +138,34 @@ impl TestApp {
             .unwrap()
             .pop()
             .unwrap()
+    }
+
+    pub async fn confirm_subscription(&self) -> Option<(NewSubscriber, SubscriptionToken)> {
+        let email_request = &self.email_server.received_requests().await.unwrap()[0];
+        let confirmation_links = self.get_confirmation_links(&email_request);
+        let token = confirmation_links
+            .html
+            .query()
+            .unwrap()
+            .split("=")
+            .nth(1)
+            .unwrap();
+        let token = SubscriptionToken::parse(token.into()).unwrap();
+
+        reqwest::get(confirmation_links.html)
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+
+        let saved = self
+            .subscription_service
+            .repo
+            .retrieve_from_token(&token)
+            .await
+            .expect("Failed to fetch saved subscription.");
+
+        Some((saved, token))
     }
 }
 
