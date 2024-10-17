@@ -1,3 +1,4 @@
+use crate::domain::new_subscriber::errors::SubscriberError;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
 #[derive(thiserror::Error, Debug)]
@@ -16,6 +17,11 @@ pub enum SubscriptionTokenError {
     ContainsForbiddenCharacters(String),
 }
 
+impl From<SubscriptionTokenError> for SubscriberError {
+    fn from(error: SubscriptionTokenError) -> Self {
+        Self::ValidationError(error.to_string())
+    }
+}
 #[derive(serde::Deserialize, Debug)]
 pub struct SubscriptionTokenRequest {
     pub subscription_token: String,

@@ -1,15 +1,15 @@
 use async_trait::async_trait;
 
+use super::errors::SubscriberError;
 use super::{
     models::{
         subscriber::{NewSubscriber, NewSubscriberRequest, SubscriberStatus},
         token::SubscriptionToken,
         token::SubscriptionTokenRequest,
     },
-    ports::{
-        SubscriberRepository, SubscriptionNotifier, SubscriptionService, SubscriptionServiceError,
-    },
+    ports::{SubscriberRepository, SubscriptionNotifier, SubscriptionService},
 };
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Subscription<R, N>
@@ -17,8 +17,8 @@ where
     R: SubscriberRepository,
     N: SubscriptionNotifier,
 {
-    pub repo: R,
-    pub notifier: N,
+    pub repo: Arc<R>,
+    pub notifier: Arc<N>,
 }
 
 impl<R, N> Subscription<R, N>
@@ -26,7 +26,7 @@ where
     R: SubscriberRepository,
     N: SubscriptionNotifier,
 {
-    pub fn new(repo: R, notifier: N) -> Self {
+    pub fn new(repo: Arc<R>, notifier: Arc<N>) -> Self {
         Self { repo, notifier }
     }
 }
@@ -40,7 +40,7 @@ where
     async fn new_subscriber(
         &self,
         subscriber_request: NewSubscriberRequest,
-    ) -> Result<NewSubscriber, SubscriptionServiceError> {
+    ) -> Result<NewSubscriber, SubscriberError> {
         let subscription_token = SubscriptionToken::default();
         let (subscriber, token) = self
             .repo
@@ -48,9 +48,8 @@ where
             .await?;
 
         if subscriber.status == SubscriberStatus::SubscriptionPendingConfirmation {
-            let message = self.notifier.build_notification(token)?;
             self.notifier
-                .send_notification(&subscriber.email, &message)
+                .send_subscriber_notification(&subscriber.email, token)
                 .await?
         }
         Ok(subscriber)
@@ -59,7 +58,7 @@ where
     async fn confirm(
         &self,
         req: SubscriptionTokenRequest,
-    ) -> Result<NewSubscriber, SubscriptionServiceError> {
+    ) -> Result<NewSubscriber, SubscriberError> {
         let subscription_token = SubscriptionTokenRequest::try_into(req)?;
 
         let mut subscriber = self.repo.retrieve_from_token(&subscription_token).await?;
@@ -72,7 +71,7 @@ where
     async fn delete(
         &self,
         req: SubscriptionTokenRequest,
-    ) -> Result<NewSubscriber, SubscriptionServiceError> {
+    ) -> Result<NewSubscriber, SubscriberError> {
         let subscription_token = SubscriptionTokenRequest::try_into(req)?;
 
         let mut subscriber = self.repo.retrieve_from_token(&subscription_token).await?;

@@ -10,10 +10,9 @@ use zero2prod::domain::new_subscriber::{
     ports::SubscriberRepository,
     service::Subscription,
 };
+use zero2prod::domain::newsletter::service::Blog;
 use zero2prod::inbound::http::Application;
-use zero2prod::outbound::{
-    db::postgres_db::PostgresDb, subscription_notifier::email_client::EmailClient,
-};
+use zero2prod::outbound::{db::postgres_db::PostgresDb, notifier::email_client::EmailClient};
 use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
     outbound::telemetry::init_logger,
@@ -193,13 +192,19 @@ pub async fn spawn_app() -> TestApp {
 
     configure_database(&configuration.database).await;
 
-    let email_client = EmailClient::new(configuration.email_client);
-    let subscription_repo = PostgresDb::new(&configuration.database);
-    let subscription_service = Subscription::new(subscription_repo, email_client);
+    let email_client = Arc::new(EmailClient::new(configuration.email_client));
+    let repo = Arc::new(PostgresDb::new(&configuration.database));
 
-    let application = Application::build(subscription_service, configuration.application.clone())
-        .await
-        .expect("Failed to build application");
+    let subscription_service = Subscription::new(Arc::clone(&repo), Arc::clone(&email_client));
+    let newsletter_service = Blog::new(Arc::clone(&repo), Arc::clone(&email_client));
+
+    let application = Application::build(
+        subscription_service,
+        newsletter_service,
+        configuration.application.clone(),
+    )
+    .await
+    .expect("Failed to build application");
     let application_port = application.port();
     let subscription_service = application.subscription_service();
     let _ = tokio::spawn(application.run_until_stopped());
@@ -211,8 +216,7 @@ pub async fn spawn_app() -> TestApp {
         email_server,
         test_user: TestUser::generate(),
     };
-    // TODO
-    //test_app.test_user.store(&test_app.db_pool).await;
+    //test_app.test_user.store(&test_app.newsletter_service).await;
     test_app
 }
 

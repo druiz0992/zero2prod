@@ -1,7 +1,7 @@
 use crate::domain::new_subscriber::{
     models::subscriber::NewSubscriberRequest, ports::SubscriptionService,
 };
-use crate::inbound::http::{AppError, ApplicationState};
+use crate::inbound::http::{AppError, SubscriptionState};
 use actix_web::{web, HttpResponse};
 
 #[tracing::instrument(
@@ -14,7 +14,7 @@ use actix_web::{web, HttpResponse};
 )]
 pub async fn subscribe<SS: SubscriptionService>(
     subscriber_request: web::Form<NewSubscriberRequest>,
-    state: web::Data<ApplicationState<SS>>,
+    state: web::Data<SubscriptionState<SS>>,
 ) -> Result<HttpResponse, AppError> {
     let subscriber_request = subscriber_request.0;
     state

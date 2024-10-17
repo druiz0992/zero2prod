@@ -1,3 +1,3 @@
 pub mod db;
-pub mod subscription_notifier;
+pub mod notifier;
 pub mod telemetry;

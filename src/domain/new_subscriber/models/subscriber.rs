@@ -1,5 +1,6 @@
 use super::email::{EmailError, SubscriberEmail};
 use super::name::{SubscriberName, SubscriberNameError};
+use crate::domain::new_subscriber::errors::SubscriberError;
 
 #[derive(serde::Deserialize)]
 pub struct NewSubscriberRequest {
@@ -64,6 +65,11 @@ impl SubscriberStatus {
     }
 }
 
+impl From<SubscriberStatusError> for SubscriberError {
+    fn from(error: SubscriberStatusError) -> Self {
+        Self::ValidationError(format!("Invalid status {}", error.to_string()))
+    }
+}
 impl From<SubscriberStatus> for String {
     fn from(value: SubscriberStatus) -> Self {
         match value {
@@ -85,7 +91,7 @@ impl From<SubscriberStatus> for String {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum NewSubscriberError {
+pub enum SubscriberValidationError {
     #[error("Invalid subscriber name: {0}")]
     InvalidName(#[from] SubscriberNameError),
     #[error("Invalid subscriber email: {0}")]
@@ -93,11 +99,13 @@ pub enum NewSubscriberError {
 }
 
 impl NewSubscriber {
-    pub fn new(req: NewSubscriberRequest) -> Result<NewSubscriber, NewSubscriberError> {
+    pub fn new(req: NewSubscriberRequest) -> Result<NewSubscriber, SubscriberValidationError> {
         Ok(Self {
             id: None,
-            email: SubscriberEmail::parse(req.email).map_err(NewSubscriberError::InvalidEmail)?,
-            name: SubscriberName::parse(req.name).map_err(NewSubscriberError::InvalidName)?,
+            email: SubscriberEmail::parse(req.email)
+                .map_err(SubscriberValidationError::InvalidEmail)?,
+            name: SubscriberName::parse(req.name)
+                .map_err(SubscriberValidationError::InvalidName)?,
             status: SubscriberStatus::NotInserted,
         })
     }
@@ -121,15 +129,21 @@ impl NewSubscriber {
 }
 
 impl TryFrom<NewSubscriberRequest> for NewSubscriber {
-    type Error = NewSubscriberError;
+    type Error = SubscriberValidationError;
     fn try_from(request: NewSubscriberRequest) -> Result<Self, Self::Error> {
         NewSubscriber::new(request)
     }
 }
 
+impl From<SubscriberValidationError> for SubscriberError {
+    fn from(error: SubscriberValidationError) -> Self {
+        Self::ValidationError(error.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{NewSubscriber, NewSubscriberError, NewSubscriberRequest, SubscriberStatus};
+    use super::{NewSubscriber, NewSubscriberRequest, SubscriberStatus, SubscriberValidationError};
 
     #[test]
     fn new_subscriber_from_request_with_invalid_name_fails() {
@@ -140,7 +154,7 @@ mod tests {
 
         assert!(matches!(
             subscriber,
-            Err(NewSubscriberError::InvalidName(_))
+            Err(SubscriberValidationError::InvalidName(_))
         ));
     }
     #[test]
@@ -152,7 +166,7 @@ mod tests {
 
         assert!(matches!(
             subscriber,
-            Err(NewSubscriberError::InvalidName(_))
+            Err(SubscriberValidationError::InvalidName(_))
         ));
     }
 
@@ -165,7 +179,7 @@ mod tests {
 
         assert!(matches!(
             subscriber,
-            Err(NewSubscriberError::InvalidEmail(_))
+            Err(SubscriberValidationError::InvalidEmail(_))
         ));
     }
 
@@ -178,7 +192,7 @@ mod tests {
 
         assert!(matches!(
             subscriber,
-            Err(NewSubscriberError::InvalidEmail(_))
+            Err(SubscriberValidationError::InvalidEmail(_))
         ));
     }
 

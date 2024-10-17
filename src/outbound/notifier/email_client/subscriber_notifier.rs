@@ -1,46 +1,13 @@
-use crate::configuration::EmailClientSettings;
-use crate::domain::new_subscriber::{
-    models::{
-        email::{EmailHtmlContent, EmailMessage, EmailSubject, EmailTextContent, SubscriberEmail},
-        token::SubscriptionToken,
-    },
-    ports::{SubscriptionNotifier, SubscriptionNotifierError},
-};
 use async_trait::async_trait;
-use reqwest::Client;
-use secrecy::{ExposeSecret, Secret};
 
-#[derive(Debug)]
-pub struct EmailClient {
-    http_client: Client,
-    base_url: String,
-    sender: SubscriberEmail,
-    authorization_token: Secret<String>,
-}
+use super::*;
+use crate::domain::new_subscriber::errors::SubscriberError;
 
 impl EmailClient {
-    pub fn new(configuration: EmailClientSettings) -> Self {
-        let sender = configuration
-            .sender()
-            .expect("Invalid sender email address");
-        let timeout = configuration.timeout();
-
-        let http_client = Client::builder().timeout(timeout).build().unwrap();
-        Self {
-            http_client,
-            base_url: configuration.base_url,
-            sender,
-            authorization_token: configuration.authorization_token,
-        }
-    }
-}
-
-#[async_trait]
-impl SubscriptionNotifier for EmailClient {
-    fn build_notification(
+    fn build_subscriber_notification(
         &self,
         subscription_token: SubscriptionToken,
-    ) -> Result<EmailMessage, SubscriptionNotifierError> {
+    ) -> Result<EmailMessage, SubscriberError> {
         let confirmation_link = format!(
             "{}/subscriptions/confirm?subscription_token={}",
             self.base_url,
@@ -61,16 +28,20 @@ impl SubscriptionNotifier for EmailClient {
 
         Ok(EmailMessage::new(subject, html_content, text_content))
     }
+}
 
+#[async_trait]
+impl SubscriptionNotifier for EmailClient {
     #[tracing::instrument(
         name = "Send a confirmation email to a new subscriber",
-        skip(self, recipient, message)
+        skip(self, recipient, token)
     )]
-    async fn send_notification(
+    async fn send_subscriber_notification(
         &self,
         recipient: &SubscriberEmail,
-        message: &EmailMessage,
-    ) -> Result<(), SubscriptionNotifierError> {
+        token: SubscriptionToken,
+    ) -> Result<(), SubscriberError> {
+        let message = self.build_subscriber_notification(token)?;
         let subject = message.subject_as_ref();
         let html_content = message.html_as_ref();
         let text_content = message.text_as_ref();
@@ -92,22 +63,12 @@ impl SubscriptionNotifier for EmailClient {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| SubscriptionNotifierError::Unexpected(anyhow::Error::from(e)))?
+            .map_err(|e| SubscriberError::Unexpected(anyhow::Error::from(e)))?
             .error_for_status()
-            .map_err(|e| SubscriptionNotifierError::Unexpected(anyhow::Error::from(e)))?;
+            .map_err(|e| SubscriberError::Unexpected(anyhow::Error::from(e)))?;
 
         Ok(())
     }
-}
-
-#[derive(serde::Serialize)]
-#[serde(rename_all = "PascalCase")]
-struct SendEmailRequest<'a> {
-    from: &'a str,
-    to: &'a str,
-    subject: &'a str,
-    html_body: &'a str,
-    text_body: &'a str,
 }
 
 #[cfg(test)]
@@ -116,7 +77,7 @@ mod tests {
     use crate::domain::new_subscriber::models::email::SubscriberEmail;
     use crate::domain::new_subscriber::models::token::SubscriptionToken;
     use crate::domain::new_subscriber::ports::SubscriptionNotifier;
-    use crate::outbound::subscription_notifier::email_client::EmailClient;
+    use crate::outbound::notifier::email_client::EmailClient;
     use claim::{assert_err, assert_ok};
     use fake::faker::internet::en::SafeEmail;
     use fake::{Fake, Faker};
@@ -171,8 +132,9 @@ mod tests {
 
         let subscription_token = SubscriptionToken::default();
 
-        let message = email_client.build_notification(subscription_token).unwrap();
-        let _ = email_client.send_notification(&email(), &message).await;
+        let _ = email_client
+            .send_subscriber_notification(&email(), subscription_token)
+            .await;
     }
 
     #[tokio::test]
@@ -188,8 +150,9 @@ mod tests {
 
         let subscription_token = SubscriptionToken::default();
 
-        let message = email_client.build_notification(subscription_token).unwrap();
-        let outcome = email_client.send_notification(&email(), &message).await;
+        let outcome = email_client
+            .send_subscriber_notification(&email(), subscription_token)
+            .await;
 
         assert_ok!(outcome);
     }
@@ -207,8 +170,9 @@ mod tests {
 
         let subscription_token = SubscriptionToken::default();
 
-        let message = email_client.build_notification(subscription_token).unwrap();
-        let outcome = email_client.send_notification(&email(), &message).await;
+        let outcome = email_client
+            .send_subscriber_notification(&email(), subscription_token)
+            .await;
 
         assert_err!(outcome);
     }
@@ -228,8 +192,9 @@ mod tests {
 
         let subscription_token = SubscriptionToken::default();
 
-        let message = email_client.build_notification(subscription_token).unwrap();
-        let outcome = email_client.send_notification(&email(), &message).await;
+        let outcome = email_client
+            .send_subscriber_notification(&email(), subscription_token)
+            .await;
 
         assert_err!(outcome);
     }
