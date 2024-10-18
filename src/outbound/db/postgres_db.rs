@@ -41,21 +41,21 @@ impl PostgresDb {
     ) -> Result<NewSubscriber, SubscriberError> {
         let record = sqlx::query!(
             "SELECT id, email, name, status FROM subscriptions WHERE email = $1",
-            subscriber.email.as_ref()
+            subscriber.email.as_str()
         )
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| SubscriberError::Unexpected(anyhow::Error::from(e)))?;
 
         let (id, status) = match record {
-            Some(existing_subscriber) if existing_subscriber.name == subscriber.name.as_ref() => {
+            Some(existing_subscriber) if existing_subscriber.name == subscriber.name.as_str() => {
                 let parsed_status = SubscriberStatus::parse(&existing_subscriber.status)?;
 
-                if existing_subscriber.name != subscriber.name.as_ref() {
+                if existing_subscriber.name != subscriber.name.as_str() {
                     return Err(SubscriberError::NotFound(format!(
                         "Subscriber with name {} and email {} not found",
-                        subscriber.name.as_ref(),
-                        subscriber.email.as_ref()
+                        subscriber.name.as_str(),
+                        subscriber.email.as_str()
                     )));
                 }
                 (Some(existing_subscriber.id), parsed_status)
@@ -85,8 +85,8 @@ impl PostgresDb {
         VALUES ($1, $2, $3, $4, $5)
                 "#,
             subscriber_id,
-            new_subscriber.email.as_ref(),
-            new_subscriber.name.as_ref(),
+            new_subscriber.email.as_str(),
+            new_subscriber.name.as_str(),
             Utc::now(),
             String::from(SubscriberStatus::SubscriptionPendingConfirmation)
         );

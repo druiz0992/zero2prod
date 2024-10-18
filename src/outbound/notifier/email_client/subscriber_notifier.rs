@@ -11,7 +11,7 @@ impl EmailClient {
         let confirmation_link = format!(
             "{}/subscriptions/confirm?subscription_token={}",
             self.base_url,
-            subscription_token.as_ref()
+            subscription_token.as_str()
         );
         let text_content = EmailTextContent::try_from(format!(
             "Welcome to our newsletter!<br />\
@@ -46,11 +46,11 @@ impl SubscriptionNotifier for EmailClient {
         let html_content = message.html_as_ref();
         let text_content = message.text_as_ref();
         let request_body = SendEmailRequest {
-            from: self.sender.as_ref(),
-            to: recipient.as_ref(),
-            subject: subject.as_ref(),
-            html_body: html_content.as_ref(),
-            text_body: text_content.as_ref(),
+            from: self.sender.as_str(),
+            to: recipient.as_str(),
+            subject: subject.as_str(),
+            html_body: html_content.as_str(),
+            text_body: text_content.as_str(),
         };
         self.send_notification(request_body)
             .await

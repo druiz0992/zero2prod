@@ -47,7 +47,7 @@ where
 
         let stored_credentials = self
             .repo
-            .get_stored_credentials(&credentials.username())
+            .get_stored_credentials(credentials.username())
             .await?;
 
         let user_id = credentials.validate_credentials(stored_credentials).await?;
@@ -62,7 +62,7 @@ where
                     let token = subscriber_with_token.1;
                     tracing::Span::current().record(
                         "subscriber_email",
-                        tracing::field::display(&subscriber.email().as_ref()),
+                        tracing::field::display(&subscriber.email().as_str()),
                     );
                     self.notifier
                         .send_newsletter(subscriber.email(), &newsletter, token, base_url)

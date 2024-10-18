@@ -31,7 +31,7 @@ impl NewsletterTitle {
             Ok(Self(title))
         }
     }
-    pub fn as_ref(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -57,12 +57,6 @@ pub struct NewsletterTextBody;
 #[derive(Debug, PartialEq)]
 pub struct NewsletterBody(String);
 
-impl NewsletterBody {
-    pub fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
 impl<B> NewsletterBodyWrapper<B> {
     pub fn new(body: String) -> Result<Self, String> {
         if body.is_empty() {
@@ -74,7 +68,7 @@ impl<B> NewsletterBodyWrapper<B> {
         })
     }
 
-    pub fn as_ref(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         &self.body.0
     }
 }
@@ -84,13 +78,13 @@ impl TryFrom<NewsletterDto> for Newsletter {
 
     fn try_from(dto: NewsletterDto) -> Result<Self, Self::Error> {
         let newsletter_title =
-            NewsletterTitle::parse(dto.title).map_err(|e| NewsletterError::ValidationError(e))?;
+            NewsletterTitle::parse(dto.title).map_err(NewsletterError::ValidationError)?;
         let newsletter_html_body =
             NewsletterBodyWrapper::<NewsletterHtmlBody>::new(dto.content.html)
-                .map_err(|e| NewsletterError::ValidationError(e))?;
+                .map_err(NewsletterError::ValidationError)?;
         let newsletter_text_body =
             NewsletterBodyWrapper::<NewsletterTextBody>::new(dto.content.text)
-                .map_err(|e| NewsletterError::ValidationError(e))?;
+                .map_err(NewsletterError::ValidationError)?;
 
         let newsletter_content = NewsletterContent {
             html: newsletter_html_body,
@@ -132,9 +126,9 @@ fn test_newsletter_deserialization() {
     }
 
     let newsletter: Newsletter = NewsletterDto::try_into(newsletter_dto.unwrap()).unwrap();
-    assert_eq!(newsletter.title.as_ref(), "My Newsletter");
-    assert_eq!(newsletter.content.html.as_ref(), "<p>Hello, world!</p>");
-    assert_eq!(newsletter.content.text.as_ref(), "Hello, world!");
+    assert_eq!(newsletter.title.as_str(), "My Newsletter");
+    assert_eq!(newsletter.content.html.as_str(), "<p>Hello, world!</p>");
+    assert_eq!(newsletter.content.text.as_str(), "Hello, world!");
 }
 
 #[test]
@@ -156,7 +150,7 @@ fn correct_newsletter_title_is_accepted() {
     let title = "a".repeat(NewsletterTitle::MAX_LENGTH);
 
     assert_eq!(
-        NewsletterTitle::parse(title.clone()).unwrap().as_ref(),
+        NewsletterTitle::parse(title.clone()).unwrap().as_str(),
         title
     );
 }
@@ -181,7 +175,7 @@ fn correct_newsletter_text_is_accepted() {
     assert_eq!(
         NewsletterBodyWrapper::<NewsletterTextBody>::new(text_body.clone())
             .unwrap()
-            .as_ref(),
+            .as_str(),
         text_body
     );
 }
@@ -192,7 +186,7 @@ fn correct_newsletter_html_is_accepted() {
     assert_eq!(
         NewsletterBodyWrapper::<NewsletterTextBody>::new(html_body.clone())
             .unwrap()
-            .as_ref(),
+            .as_str(),
         html_body
     );
 }

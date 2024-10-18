@@ -53,9 +53,9 @@ impl EmailClient {
             .json(&email_request_body)
             .send()
             .await
-            .map_err(|e| anyhow::Error::from(e))?
+            .map_err(anyhow::Error::from)?
             .error_for_status()
-            .map_err(|e| anyhow::Error::from(e))?;
+            .map_err(anyhow::Error::from)?;
 
         Ok(())
     }

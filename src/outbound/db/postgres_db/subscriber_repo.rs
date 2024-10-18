@@ -24,7 +24,7 @@ impl PostgresDb {
     ) -> Result<SubscriberId, sqlx::Error> {
         let result = sqlx::query!(
             r#"SELECT subscriber_id FROM subscription_tokens WHERE subscription_token = $1"#,
-            subscription_token.as_ref(),
+            subscription_token.as_str(),
         )
         .fetch_optional(&self.pool)
         .await?;
@@ -45,7 +45,7 @@ impl PostgresDb {
         let query = sqlx::query!(
             r#"INSERT INTO subscription_tokens (subscription_token, subscriber_id)
             VALUES ($1, $2)"#,
-            subscription_token.as_ref(),
+            subscription_token.as_str(),
             subscriber_id.unwrap(),
         );
         transaction.execute(query).await?;
@@ -158,8 +158,8 @@ impl SubscriberRepository for PostgresDb {
     async fn update(&self, subscriber: NewSubscriber) -> Result<(), SubscriberError> {
         let result = sqlx::query!(
             r#"UPDATE subscriptions SET email = $1, name = $2, status = $3 WHERE id = $4"#,
-            subscriber.email.as_ref(),
-            subscriber.name.as_ref(),
+            subscriber.email.as_str(),
+            subscriber.name.as_str(),
             String::from(subscriber.status),
             subscriber.id,
         )
@@ -171,7 +171,7 @@ impl SubscriberRepository for PostgresDb {
         if result.rows_affected() == 0 {
             return Err(SubscriberError::NotFound(format!(
                 "Subscriber with email {} not found,",
-                subscriber.email.as_ref(),
+                subscriber.email.as_str(),
             )));
         }
 
@@ -187,7 +187,7 @@ impl SubscriberRepository for PostgresDb {
             .get_subscriber_id_from_token(token)
             .await
             .map_err(|e| SubscriberError::Unexpected(anyhow::Error::from(e)))?
-            .ok_or_else(|| SubscriberError::AuthError(format!("Token not found")))?;
+            .ok_or_else(|| SubscriberError::AuthError("Token not found".to_string()))?;
 
         let subscriber = self
             .get_subscriber_from_id(id)

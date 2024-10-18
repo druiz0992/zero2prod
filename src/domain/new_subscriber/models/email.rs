@@ -13,9 +13,8 @@ impl SubscriberEmail {
             )))
         }
     }
-}
-impl AsRef<str> for SubscriberEmail {
-    fn as_ref(&self) -> &str {
+
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -77,6 +76,12 @@ impl EmailMessage {
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct EmailSubject(String);
 
+impl EmailSubject {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 impl TryFrom<String> for EmailSubject {
     type Error = EmailError;
 
@@ -98,14 +103,15 @@ impl TryFrom<&str> for EmailSubject {
         }
     }
 }
-impl AsRef<str> for EmailSubject {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct EmailHtmlContent(String);
+
+impl EmailHtmlContent {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 impl TryFrom<String> for EmailHtmlContent {
     type Error = EmailError;
@@ -128,13 +134,14 @@ impl TryFrom<&str> for EmailHtmlContent {
         }
     }
 }
-impl AsRef<str> for EmailHtmlContent {
-    fn as_ref(&self) -> &str {
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+pub struct EmailTextContent(String);
+
+impl EmailTextContent {
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 }
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub struct EmailTextContent(String);
 
 impl TryFrom<String> for EmailTextContent {
     type Error = EmailError;
@@ -155,11 +162,6 @@ impl TryFrom<&str> for EmailTextContent {
                 "EmailTextContent cannot be empty.".into(),
             ))
         }
-    }
-}
-impl AsRef<str> for EmailTextContent {
-    fn as_ref(&self) -> &str {
-        &self.0
     }
 }
 
@@ -209,7 +211,7 @@ mod tests {
     fn subscriber_email_with_two_letter_top_level_domain_is_accepted() {
         let email = "hello@domain.ai".to_string();
         assert_eq!(
-            SubscriberEmail::parse(email.clone()).unwrap().as_ref(),
+            SubscriberEmail::parse(email.clone()).unwrap().as_str(),
             email
         )
     }

@@ -45,7 +45,7 @@ impl NewsletterRepository for PostgresDb {
             stream::iter(confirmed_subscribers)
                 .then(|r| async move {
                     match SubscriberStatus::parse(&r.status) {
-                        Ok(status) if status == SubscriberStatus::SubscriptionConfirmed => {
+                        Ok(SubscriberStatus::SubscriptionConfirmed) => {
                             let name = SubscriberName::parse(r.name)?;
                             let email = SubscriberEmail::parse(r.email)?;
                             let confirmed_subscriber = NewSubscriber::build(name, email)
@@ -61,9 +61,9 @@ impl NewsletterRepository for PostgresDb {
                             ))
                         }
                         Err(error) => Err(NewsletterError::ValidationError(error.to_string())),
-                        _ => Err(NewsletterError::NotFound(format!(
-                            "No confirmed subscribers found"
-                        ))),
+                        _ => Err(NewsletterError::NotFound(
+                            "No confirmed subscribers found".to_string(),
+                        )),
                     }
                 })
                 .collect()

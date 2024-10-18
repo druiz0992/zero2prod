@@ -69,7 +69,7 @@ impl SubscriberStatus {
 
 impl From<SubscriberStatusError> for SubscriberError {
     fn from(error: SubscriberStatusError) -> Self {
-        Self::ValidationError(format!("Invalid status {}", error.to_string()))
+        Self::ValidationError(format!("Invalid status {}", error))
     }
 }
 impl From<SubscriberStatus> for String {
@@ -205,8 +205,8 @@ mod tests {
         let subscriber_request = NewSubscriberRequest::new(email, name);
         let subscriber = NewSubscriber::new(subscriber_request).unwrap();
 
-        assert_eq!(subscriber.email.as_ref(), email);
-        assert_eq!(subscriber.name.as_ref(), name);
+        assert_eq!(subscriber.email.as_str(), email);
+        assert_eq!(subscriber.name.as_str(), name);
         assert_eq!(subscriber.status, SubscriberStatus::NotInserted,);
         assert!(matches!(subscriber.id, None));
     }
@@ -218,8 +218,8 @@ mod tests {
         let subscriber_request = NewSubscriberRequest::new(email, name);
         let subscriber = NewSubscriber::try_from(subscriber_request).unwrap();
 
-        assert_eq!(subscriber.email.as_ref(), email);
-        assert_eq!(subscriber.name.as_ref(), name);
+        assert_eq!(subscriber.email.as_str(), email);
+        assert_eq!(subscriber.name.as_str(), name);
         assert_eq!(subscriber.status, SubscriberStatus::NotInserted,);
         assert!(matches!(subscriber.id, None));
     }

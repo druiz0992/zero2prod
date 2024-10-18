@@ -46,7 +46,7 @@ async fn unsubscribe_request_with_unknown_token_is_rejected_with_401() {
     }
     let token = SubscriptionToken::default();
     let response = app
-        .get_subscription_unsubscribe(token.as_ref().into())
+        .get_subscription_unsubscribe(token.as_str().into())
         .await;
     assert_eq!(response.status().as_u16(), 401);
 }
@@ -72,7 +72,7 @@ async fn unsubscribe_request_with_unknown_subscriber_id_is_rejected_with_500() {
             .await
             .unwrap();
         let response = app
-            .get_subscription_unsubscribe(token.as_ref().into())
+            .get_subscription_unsubscribe(token.as_str().into())
             .await;
         assert_eq!(response.status().as_u16(), 500);
     } else {
@@ -100,12 +100,12 @@ async fn sucessful_unconfirmed_unsubscription_maintains_subscriber() {
     app.post_subscriptions(body.into()).await;
     if let Some((subscriber, token)) = app.confirm_subscription().await {
         let response = app
-            .get_subscription_unsubscribe(token.as_ref().into())
+            .get_subscription_unsubscribe(token.as_str().into())
             .await;
         let pool = app.subscription_service.repo.pool();
         let record = sqlx::query!(
             "SELECT status FROM subscriptions WHERE email = $1",
-            subscriber.email.as_ref()
+            subscriber.email.as_str()
         )
         .fetch_one(pool)
         .await
@@ -133,15 +133,15 @@ async fn sucessful_confirmed_unsubscription_deletes_subscriber() {
 
     app.post_subscriptions(body.into()).await;
     if let Some((subscriber, token)) = app.confirm_subscription().await {
-        app.get_subscription_unsubscribe(token.as_ref().into())
+        app.get_subscription_unsubscribe(token.as_str().into())
             .await;
         let response = app
-            .get_subscription_unsubscribe(token.as_ref().into())
+            .get_subscription_unsubscribe(token.as_str().into())
             .await;
         let pool = app.subscription_service.repo.pool();
         let record = sqlx::query!(
             "SELECT status FROM subscriptions WHERE email = $1",
-            subscriber.email.as_ref()
+            subscriber.email.as_str()
         )
         .fetch_optional(pool)
         .await

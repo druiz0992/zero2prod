@@ -45,9 +45,9 @@ async fn subscribe_persists_the_new_subscriber() {
         .await
         .expect("Failed to fetch saved subscription.");
 
-    assert_eq!(updated_subscriber.name.as_ref(), "le guin");
+    assert_eq!(updated_subscriber.name.as_str(), "le guin");
     assert_eq!(
-        updated_subscriber.email.as_ref(),
+        updated_subscriber.email.as_str(),
         "ursula_le_guin@gmail.com"
     );
     assert_eq!(

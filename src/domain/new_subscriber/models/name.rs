@@ -37,10 +37,8 @@ impl SubscriberName {
         }
         Ok(Self(s))
     }
-}
 
-impl AsRef<str> for SubscriberName {
-    fn as_ref(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 }

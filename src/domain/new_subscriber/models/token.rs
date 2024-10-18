@@ -65,10 +65,8 @@ impl SubscriptionToken {
             .collect();
         SubscriptionToken::parse(token).unwrap()
     }
-}
 
-impl AsRef<str> for SubscriptionToken {
-    fn as_ref(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 }

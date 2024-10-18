@@ -89,8 +89,8 @@ async fn clicking_on_the_confirmation_link_confirms_a_subscriber() {
 
     app.post_subscriptions(body.into()).await;
     if let Some((subscriber, _)) = app.confirm_subscription().await {
-        assert_eq!(subscriber.name.as_ref(), "le guin");
-        assert_eq!(subscriber.email.as_ref(), "ursula_le_guin@gmail.com");
+        assert_eq!(subscriber.name.as_str(), "le guin");
+        assert_eq!(subscriber.email.as_str(), "ursula_le_guin@gmail.com");
         assert_eq!(subscriber.status, SubscriberStatus::SubscriptionConfirmed);
     } else {
         panic!("Subscription wasnt confirmed")
@@ -113,8 +113,8 @@ async fn clicking_on_the_confirmation_link_twice_confirms_a_subscriber() {
         panic!("Subscription wasn't confirmed the first time ")
     }
     if let Some((subscriber, _)) = app.confirm_subscription().await {
-        assert_eq!(subscriber.name.as_ref(), "le guin");
-        assert_eq!(subscriber.email.as_ref(), "ursula_le_guin@gmail.com");
+        assert_eq!(subscriber.name.as_str(), "le guin");
+        assert_eq!(subscriber.email.as_str(), "ursula_le_guin@gmail.com");
         assert_eq!(subscriber.status, SubscriberStatus::SubscriptionConfirmed);
     } else {
         panic!("Subscription wasnt confirmed the second time")

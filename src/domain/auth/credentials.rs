@@ -28,10 +28,7 @@ impl Credentials {
         self,
         stored_credentials: Option<StoredCredentials>,
     ) -> Result<uuid::Uuid, CredentialsError> {
-        let stored_credentials = match stored_credentials {
-            Some(credentials) => credentials,
-            None => StoredCredentials::default(),
-        };
+        let stored_credentials = stored_credentials.unwrap_or_default();
         let user_id = stored_credentials.user_id;
 
         spawn_blocking_with_tracing(move || stored_credentials.verify(self.password))
@@ -40,7 +37,7 @@ impl Credentials {
             .map_err(CredentialsError::Unexpected)??;
 
         if user_id.is_nil() {
-            return Err(CredentialsError::AuthError(format!("Unknown username.")));
+            return Err(CredentialsError::AuthError("Unknown username.".to_string()));
         }
 
         Ok(user_id)
@@ -72,14 +69,14 @@ impl StoredCredentials {
     fn verify(&self, password_candidate: Secret<String>) -> Result<(), CredentialsError> {
         let expected_password_hash = PasswordHash::new(self.password_hash.expose_secret())
             .context("Failed to parse hash in PHC string format.")
-            .map_err(|e| CredentialsError::Unexpected(e))?;
+            .map_err(CredentialsError::Unexpected)?;
 
         Argon2::default()
             .verify_password(
                 password_candidate.expose_secret().as_bytes(),
                 &expected_password_hash,
             )
-            .map_err(|_| CredentialsError::AuthError(format!("Invalid password")))
+            .map_err(|_| CredentialsError::AuthError("Invalid password.".to_string()))
     }
 }
 

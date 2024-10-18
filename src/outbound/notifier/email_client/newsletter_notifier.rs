@@ -19,14 +19,14 @@ impl NewsletterNotifier for EmailClient {
         token: SubscriptionToken,
         base_url: &str,
     ) -> Result<(), NewsletterError> {
-        let unsubscribe_link = build_unsubscribe_link(&base_url, &token);
+        let unsubscribe_link = build_unsubscribe_link(base_url, &token);
         let html_content = embed_link_to_html_content(&newsletter.content.html, &unsubscribe_link);
         let text_content = embed_link_to_text_content(&newsletter.content.text, &unsubscribe_link);
-        let subject = newsletter.title.as_ref();
+        let subject = newsletter.title.as_str();
         let request_body = SendEmailRequest {
-            from: self.sender.as_ref(),
-            to: recipient.as_ref(),
-            subject: subject.as_ref(),
+            from: self.sender.as_str(),
+            to: recipient.as_str(),
+            subject,
             html_body: html_content.as_ref(),
             text_body: text_content.as_ref(),
         };
@@ -44,7 +44,7 @@ fn embed_link_to_text_content(
         "\nClick <a href=\"{}\">here</a> to unsubscribe from newsletter.",
         link
     );
-    let content_with_link = format!("{} {} ", body.as_ref(), text_with_link);
+    let content_with_link = format!("{} {} ", body.as_str(), text_with_link);
     content_with_link
 }
 fn embed_link_to_html_content(
@@ -52,7 +52,7 @@ fn embed_link_to_html_content(
     link: &str,
 ) -> String {
     let text_with_link = format!("\nClick here {} to unsubscribe from newsletter.", link);
-    let content_with_link = format!("{} {} ", body.as_ref(), text_with_link);
+    let content_with_link = format!("{} {} ", body.as_str(), text_with_link);
     content_with_link
 }
 
@@ -60,7 +60,7 @@ fn build_unsubscribe_link(base_url: &str, token: &SubscriptionToken) -> String {
     let unsubscribe_link = format!(
         "{}/subscriptions/unsubscribe?subscription_token={}",
         base_url,
-        token.as_ref()
+        token.as_str()
     );
     unsubscribe_link
 }
