@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
-use super::errors::SubscriberError;
 use super::{
+    errors::SubscriberError,
     models::{
         subscriber::{NewSubscriber, NewSubscriberRequest, SubscriberStatus},
         token::SubscriptionToken,

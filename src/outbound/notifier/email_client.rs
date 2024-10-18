@@ -37,6 +37,28 @@ impl EmailClient {
             authorization_token: configuration.authorization_token,
         }
     }
+
+    async fn send_notification<'a>(
+        &'a self,
+        email_request_body: SendEmailRequest<'a>,
+    ) -> Result<(), anyhow::Error> {
+        let url = format!("{}/email", self.base_url);
+        let _builder = self
+            .http_client
+            .post(&url)
+            .header(
+                "X-Postmark-Server-Token",
+                self.authorization_token.expose_secret(),
+            )
+            .json(&email_request_body)
+            .send()
+            .await
+            .map_err(|e| anyhow::Error::from(e))?
+            .error_for_status()
+            .map_err(|e| anyhow::Error::from(e))?;
+
+        Ok(())
+    }
 }
 
 #[derive(serde::Serialize)]

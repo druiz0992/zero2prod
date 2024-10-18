@@ -1,7 +1,9 @@
-use crate::domain::new_subscriber::{
-    models::subscriber::NewSubscriberRequest, ports::SubscriptionService,
+use crate::{
+    domain::new_subscriber::{
+        models::subscriber::NewSubscriberRequest, ports::SubscriptionService,
+    },
+    inbound::http::{AppError, SubscriptionState},
 };
-use crate::inbound::http::{AppError, SubscriptionState};
 use actix_web::{web, HttpResponse};
 
 #[tracing::instrument(

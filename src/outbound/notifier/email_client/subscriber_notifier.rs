@@ -45,7 +45,6 @@ impl SubscriptionNotifier for EmailClient {
         let subject = message.subject_as_ref();
         let html_content = message.html_as_ref();
         let text_content = message.text_as_ref();
-        let url = format!("{}/email", self.base_url);
         let request_body = SendEmailRequest {
             from: self.sender.as_ref(),
             to: recipient.as_ref(),
@@ -53,21 +52,9 @@ impl SubscriptionNotifier for EmailClient {
             html_body: html_content.as_ref(),
             text_body: text_content.as_ref(),
         };
-        let _builder = self
-            .http_client
-            .post(&url)
-            .header(
-                "X-Postmark-Server-Token",
-                self.authorization_token.expose_secret(),
-            )
-            .json(&request_body)
-            .send()
+        self.send_notification(request_body)
             .await
-            .map_err(|e| SubscriberError::Unexpected(anyhow::Error::from(e)))?
-            .error_for_status()
-            .map_err(|e| SubscriberError::Unexpected(anyhow::Error::from(e)))?;
-
-        Ok(())
+            .map_err(SubscriberError::Unexpected)
     }
 }
 

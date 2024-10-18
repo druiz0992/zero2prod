@@ -1,15 +1,12 @@
 use crate::configuration::ApplicationSettings;
-use crate::domain::new_subscriber::errors::SubscriberError;
-use crate::domain::new_subscriber::ports::SubscriptionService;
-use crate::domain::newsletter::errors::NewsletterError;
-use crate::domain::newsletter::ports::NewsletterService;
+use crate::domain::auth::credentials::CredentialsError;
+use crate::domain::new_subscriber::{errors::SubscriberError, ports::SubscriptionService};
+use crate::domain::newsletter::{errors::NewsletterError, ports::NewsletterService};
 use crate::inbound::http::handlers::{
     confirm, health_check, publish_newsletter, subscribe, unsubscribe,
 };
-use crate::routes::error_chain_fmt;
 use actix_web::dev::Server;
-use actix_web::{http::StatusCode, ResponseError};
-use actix_web::{web, App, HttpServer};
+use actix_web::{http::StatusCode, web, App, HttpServer, ResponseError};
 use std::net::TcpListener;
 use std::sync::Arc;
 use tracing_actix_web::TracingLogger;
@@ -148,6 +145,14 @@ impl From<NewsletterError> for AppError {
             NewsletterError::NotFound(s) => AppError::NotFound(s),
             NewsletterError::Unexpected(s) => AppError::Unexpected(s),
             NewsletterError::AuthError(s) => AppError::AuthError(s),
+        }
+    }
+}
+impl From<CredentialsError> for AppError {
+    fn from(error: CredentialsError) -> Self {
+        match error {
+            CredentialsError::Unexpected(s) => AppError::Unexpected(s),
+            CredentialsError::AuthError(s) => AppError::AuthError(s),
         }
     }
 }

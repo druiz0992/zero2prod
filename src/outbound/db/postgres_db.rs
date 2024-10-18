@@ -7,7 +7,6 @@ use crate::domain::new_subscriber::{
     },
     ports::SubscriberRepository,
 };
-use crate::domain::newsletter::models::newsletter::Newsletter;
 use crate::domain::newsletter::ports::NewsletterRepository;
 use anyhow::Context;
 use chrono::Utc;

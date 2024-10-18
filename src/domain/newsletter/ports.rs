@@ -1,11 +1,13 @@
 use async_trait::async_trait;
 
-use super::models::newsletter::{self, Newsletter};
-use crate::domain::auth::credentials::{Credentials, StoredCredentials};
-use crate::domain::new_subscriber::models::email::SubscriberEmail;
-use crate::domain::new_subscriber::models::token::SubscriptionToken;
-use crate::domain::newsletter::errors::NewsletterError;
-use crate::domain::newsletter::models::confirmed_subscribers::ConfirmedSubscriber;
+use crate::domain::{
+    auth::credentials::{Credentials, StoredCredentials},
+    new_subscriber::models::{email::SubscriberEmail, token::SubscriptionToken},
+    newsletter::{
+        errors::NewsletterError,
+        models::{confirmed_subscribers::ConfirmedSubscriber, newsletter::Newsletter},
+    },
+};
 
 #[async_trait]
 pub trait NewsletterRepository: Clone + Send + Sync + 'static {

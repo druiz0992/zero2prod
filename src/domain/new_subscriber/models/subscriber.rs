@@ -1,5 +1,7 @@
-use super::email::{EmailError, SubscriberEmail};
-use super::name::{SubscriberName, SubscriberNameError};
+use super::{
+    email::{EmailError, SubscriberEmail},
+    name::{SubscriberName, SubscriberNameError},
+};
 use crate::domain::new_subscriber::errors::SubscriberError;
 
 #[derive(serde::Deserialize)]

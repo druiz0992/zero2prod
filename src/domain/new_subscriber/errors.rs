@@ -1,5 +1,4 @@
-use crate::domain::new_subscriber::models::email::EmailError;
-use crate::domain::new_subscriber::models::name::SubscriberNameError;
+use crate::domain::new_subscriber::models::{email::EmailError, name::SubscriberNameError};
 
 #[derive(thiserror::Error, Debug)]
 pub enum SubscriberError {

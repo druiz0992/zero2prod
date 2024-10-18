@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 
-use super::errors::SubscriberError;
-use super::models::{
-    email::{EmailError, EmailMessage, SubscriberEmail},
-    subscriber::{
-        NewSubscriber, NewSubscriberRequest, SubscriberStatusError, SubscriberValidationError,
+use super::{
+    errors::SubscriberError,
+    models::{
+        email::SubscriberEmail,
+        subscriber::{NewSubscriber, NewSubscriberRequest},
+        token::{SubscriptionToken, SubscriptionTokenRequest},
     },
-    token::{SubscriptionToken, SubscriptionTokenError, SubscriptionTokenRequest},
 };
 
 #[async_trait]

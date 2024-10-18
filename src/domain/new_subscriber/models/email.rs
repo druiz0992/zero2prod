@@ -1,5 +1,3 @@
-use crate::domain::new_subscriber::errors::SubscriberError;
-use crate::domain::newsletter::errors::NewsletterError;
 use validator::validate_email;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]

@@ -19,7 +19,6 @@ use zero2prod::{
 };
 
 pub struct TestUser {
-    #[allow(dead_code)]
     pub user_id: Uuid,
     pub username: String,
     pub password: String,
@@ -34,8 +33,8 @@ impl TestUser {
         }
     }
 
-    #[allow(dead_code)]
-    async fn store(&self, pool: &PgPool) {
+    async fn store(&self, db: Arc<PostgresDb>) {
+        let db = db.as_ref();
         let salt = SaltString::generate(&mut rand::thread_rng());
         let password_hash = Argon2::new(
             Algorithm::Argon2id,
@@ -51,7 +50,7 @@ impl TestUser {
             self.username,
             password_hash
         )
-        .execute(pool)
+        .execute(db.pool())
         .await
         .expect("Failed to store test user.");
     }
@@ -65,8 +64,9 @@ pub struct ConfirmationLinks {
 
 pub struct TestApp {
     pub address: String,
-    #[allow(dead_code)]
     pub subscription_service: Arc<Subscription<PostgresDb, EmailClient>>,
+    #[allow(dead_code)]
+    pub newsletter_service: Arc<Blog<PostgresDb, EmailClient>>,
     pub email_server: MockServer,
     pub port: u16,
     pub test_user: TestUser,
@@ -194,7 +194,6 @@ pub async fn spawn_app() -> TestApp {
 
     let email_client = Arc::new(EmailClient::new(configuration.email_client));
     let repo = Arc::new(PostgresDb::new(&configuration.database));
-
     let subscription_service = Subscription::new(Arc::clone(&repo), Arc::clone(&email_client));
     let newsletter_service = Blog::new(Arc::clone(&repo), Arc::clone(&email_client));
 
@@ -205,18 +204,23 @@ pub async fn spawn_app() -> TestApp {
     )
     .await
     .expect("Failed to build application");
+
     let application_port = application.port();
     let subscription_service = application.subscription_service();
+    let newsletter_service = application.newsletter_service();
+
     let _ = tokio::spawn(application.run_until_stopped());
 
     let test_app = TestApp {
         address: format!("http://localhost:{}", application_port),
         port: application_port,
         subscription_service,
+        newsletter_service,
         email_server,
         test_user: TestUser::generate(),
     };
-    //test_app.test_user.store(&test_app.newsletter_service).await;
+
+    test_app.test_user.store(repo.clone()).await;
     test_app
 }
 

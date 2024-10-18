@@ -1,7 +1,7 @@
-use crate::domain::new_subscriber::{
-    models::token::SubscriptionTokenRequest, ports::SubscriptionService,
+use crate::{
+    domain::new_subscriber::{models::token::SubscriptionTokenRequest, ports::SubscriptionService},
+    inbound::http::{AppError, SubscriptionState},
 };
-use crate::inbound::http::{AppError, SubscriptionState};
 use actix_web::{web, HttpResponse};
 
 #[tracing::instrument(name = "Deleting a subscriber", skip(state, req))]

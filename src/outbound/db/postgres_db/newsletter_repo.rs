@@ -7,7 +7,6 @@ use crate::domain::new_subscriber::models::name::SubscriberName;
 use crate::domain::newsletter::errors::NewsletterError;
 use crate::domain::newsletter::models::confirmed_subscribers::ConfirmedSubscriber;
 use futures::stream::{self, StreamExt};
-use secrecy::Secret;
 
 impl PostgresDb {}
 

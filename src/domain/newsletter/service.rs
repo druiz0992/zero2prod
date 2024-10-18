@@ -1,12 +1,13 @@
 use async_trait::async_trait;
 
-use super::models::newsletter::Newsletter;
-use super::ports::{NewsletterNotifier, NewsletterRepository, NewsletterService};
-use crate::domain::auth::credentials::{Credentials, CredentialsError};
-use crate::domain::new_subscriber::models::subscriber;
-use crate::domain::newsletter::errors::NewsletterError;
-use secrecy::{ExposeSecret, Secret};
-use std::borrow::Borrow;
+use crate::domain::{
+    auth::credentials::Credentials,
+    newsletter::{
+        errors::NewsletterError,
+        models::newsletter::Newsletter,
+        ports::{NewsletterNotifier, NewsletterRepository, NewsletterService},
+    },
+};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]

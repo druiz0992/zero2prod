@@ -2,15 +2,21 @@
 
 use uuid::Uuid;
 
-use crate::domain::new_subscriber::models::email::SubscriberEmail;
-use crate::domain::new_subscriber::models::token::SubscriptionToken;
-use crate::domain::newsletter::models::newsletter::{Newsletter, NewsletterBody, NewsletterDto};
-use crate::domain::newsletter::ports::NewsletterService;
-use crate::inbound::http::auth;
-use crate::inbound::http::{AppError, NewsletterState};
-use crate::outbound::telemetry::spawn_blocking_with_tracing;
-use actix_web::http::header::HeaderMap;
-use actix_web::{web, HttpRequest, HttpResponse, ResponseError};
+use crate::{
+    domain::{
+        new_subscriber::models::{email::SubscriberEmail, token::SubscriptionToken},
+        newsletter::{
+            models::newsletter::{Newsletter, NewsletterBody, NewsletterDto},
+            ports::NewsletterService,
+        },
+    },
+    inbound::http::{auth, AppError, NewsletterState},
+    outbound::telemetry::spawn_blocking_with_tracing,
+};
+use actix_web::{
+    http::header::HeaderMap,
+    {web, HttpRequest, HttpResponse, ResponseError},
+};
 use anyhow::Context;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
