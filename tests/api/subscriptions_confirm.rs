@@ -2,6 +2,7 @@ use crate::helpers::spawn_app;
 use futures::stream::{self, StreamExt};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
+use zero2prod::domain::new_subscriber::models::subscriber::SubscriberStatus;
 
 #[tokio::test]
 async fn confirmation_without_token_is_rejected_with_a_400() {
@@ -87,23 +88,13 @@ async fn clicking_on_the_confirmation_link_confirms_a_subscriber() {
         .await;
 
     app.post_subscriptions(body.into()).await;
-    let email_request = &app.email_server.received_requests().await.unwrap()[0];
-    let confirmation_links = app.get_confirmation_links(&email_request);
-
-    reqwest::get(confirmation_links.html)
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
-
-    let saved = sqlx::query!("SELECT email, name, status FROM subscriptions",)
-        .fetch_one(&app.db_pool)
-        .await
-        .expect("Failed to fetch saved subscription");
-
-    assert_eq!(saved.email, "ursula_le_guin@gmail.com");
-    assert_eq!(saved.name, "le guin");
-    assert_eq!(saved.status, "confirmed");
+    if let Some((subscriber, _)) = app.confirm_subscription().await {
+        assert_eq!(subscriber.name.as_str(), "le guin");
+        assert_eq!(subscriber.email.as_str(), "ursula_le_guin@gmail.com");
+        assert_eq!(subscriber.status, SubscriberStatus::SubscriptionConfirmed);
+    } else {
+        panic!("Subscription wasnt confirmed")
+    }
 }
 
 #[tokio::test]
@@ -118,28 +109,16 @@ async fn clicking_on_the_confirmation_link_twice_confirms_a_subscriber() {
         .await;
 
     app.post_subscriptions(body.into()).await;
-    let email_request = &app.email_server.received_requests().await.unwrap()[0];
-    let confirmation_links = app.get_confirmation_links(&email_request);
-
-    reqwest::get(confirmation_links.html.clone())
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
-    reqwest::get(confirmation_links.html)
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
-
-    let saved = sqlx::query!("SELECT email, name, status FROM subscriptions",)
-        .fetch_one(&app.db_pool)
-        .await
-        .expect("Failed to fetch saved subscription");
-
-    assert_eq!(saved.email, "ursula_le_guin@gmail.com");
-    assert_eq!(saved.name, "le guin");
-    assert_eq!(saved.status, "confirmed");
+    if app.confirm_subscription().await.is_none() {
+        panic!("Subscription wasn't confirmed the first time ")
+    }
+    if let Some((subscriber, _)) = app.confirm_subscription().await {
+        assert_eq!(subscriber.name.as_str(), "le guin");
+        assert_eq!(subscriber.email.as_str(), "ursula_le_guin@gmail.com");
+        assert_eq!(subscriber.status, SubscriberStatus::SubscriptionConfirmed);
+    } else {
+        panic!("Subscription wasnt confirmed the second time")
+    }
 }
 
 #[tokio::test]
@@ -156,17 +135,23 @@ async fn if_the_link_returned_by_subscribe_doesnt_exist_return_401() {
     app.post_subscriptions(body.into()).await;
     let email_request = &app.email_server.received_requests().await.unwrap()[0];
     let confirmation_links = app.get_confirmation_links(&email_request);
+    let token = confirmation_links
+        .html
+        .query()
+        .unwrap()
+        .split("=")
+        .nth(1)
+        .unwrap();
 
-    if let Some(query) = confirmation_links.html.query() {
-        if let Some(token) = query.split("=").nth(1) {
-            sqlx::query!(
-                r#"DELETE FROM subscription_tokens WHERE subscription_token = $1"#,
-                token
-            )
-            .execute(&app.db_pool)
-            .await
-            .expect("Failed to fetch saved subscription");
-        }
+    if let Some(_) = confirmation_links.html.query() {
+        let pool = app.subscription_service.repo.pool();
+        sqlx::query!(
+            "DELETE FROM subscription_tokens WHERE subscription_token=$1",
+            token
+        )
+        .execute(pool)
+        .await
+        .unwrap();
     }
 
     let response = reqwest::get(confirmation_links.html).await.unwrap();

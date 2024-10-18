@@ -1,4 +1,4 @@
-use crate::domain::SubscriberEmail;
+use crate::domain::new_subscriber::models::email::{EmailError, SubscriberEmail};
 use secrecy::ExposeSecret;
 use secrecy::Secret;
 use serde_aux::field_attributes::deserialize_number_from_string;
@@ -41,6 +41,12 @@ pub struct Settings {
     pub email_client: EmailClientSettings,
 }
 
+impl Settings {
+    pub fn log_level(&self) -> String {
+        self.general.log_level.to_string()
+    }
+}
+
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct GeneralSettings {
     pub log_level: String,
@@ -55,7 +61,7 @@ pub struct EmailClientSettings {
 }
 
 impl EmailClientSettings {
-    pub fn sender(&self) -> Result<SubscriberEmail, String> {
+    pub fn sender(&self) -> Result<SubscriberEmail, EmailError> {
         SubscriberEmail::parse(self.sender_email.clone())
     }
     pub fn timeout(&self) -> std::time::Duration {

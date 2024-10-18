@@ -2,12 +2,20 @@ use argon2::password_hash::SaltString;
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version};
 use once_cell::sync::Lazy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
+use std::sync::Arc;
 use uuid::Uuid;
 use wiremock::MockServer;
+use zero2prod::domain::new_subscriber::{
+    models::{subscriber::NewSubscriber, token::SubscriptionToken},
+    ports::SubscriberRepository,
+    service::Subscription,
+};
+use zero2prod::domain::newsletter::service::Blog;
+use zero2prod::inbound::http::Application;
+use zero2prod::outbound::{db::postgres_db::PostgresDb, notifier::email_client::EmailClient};
 use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
-    startup::{get_connection_pool, Application},
-    telemetry::{get_subscriber, init_subscriber},
+    outbound::telemetry::init_logger,
 };
 
 pub struct TestUser {
@@ -25,7 +33,8 @@ impl TestUser {
         }
     }
 
-    async fn store(&self, pool: &PgPool) {
+    async fn store(&self, db: Arc<PostgresDb>) {
+        let db = db.as_ref();
         let salt = SaltString::generate(&mut rand::thread_rng());
         let password_hash = Argon2::new(
             Algorithm::Argon2id,
@@ -41,7 +50,7 @@ impl TestUser {
             self.username,
             password_hash
         )
-        .execute(pool)
+        .execute(db.pool())
         .await
         .expect("Failed to store test user.");
     }
@@ -55,8 +64,9 @@ pub struct ConfirmationLinks {
 
 pub struct TestApp {
     pub address: String,
+    pub subscription_service: Arc<Subscription<PostgresDb, EmailClient>>,
     #[allow(dead_code)]
-    pub db_pool: PgPool,
+    pub newsletter_service: Arc<Blog<PostgresDb, EmailClient>>,
     pub email_server: MockServer,
     pub port: u16,
     pub test_user: TestUser,
@@ -71,6 +81,16 @@ impl TestApp {
             .send()
             .await
             .expect("Failed to execute request.")
+    }
+
+    pub async fn get_subscription_unsubscribe(&self, token: String) -> reqwest::Response {
+        reqwest::Client::new()
+            .get(&format!("{}/subscriptions/unsubscribe", &self.address))
+            .query(&[("subscription_token", token.as_str())])
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .send()
+            .await
+            .expect("Failed to execute unsubscription request.")
     }
 
     pub fn get_confirmation_links(&self, email_requests: &wiremock::Request) -> ConfirmationLinks {
@@ -118,6 +138,34 @@ impl TestApp {
             .pop()
             .unwrap()
     }
+
+    pub async fn confirm_subscription(&self) -> Option<(NewSubscriber, SubscriptionToken)> {
+        let email_request = &self.email_server.received_requests().await.unwrap()[0];
+        let confirmation_links = self.get_confirmation_links(&email_request);
+        let token = confirmation_links
+            .html
+            .query()
+            .unwrap()
+            .split("=")
+            .nth(1)
+            .unwrap();
+        let token = SubscriptionToken::parse(token.into()).unwrap();
+
+        reqwest::get(confirmation_links.html)
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+
+        let saved = self
+            .subscription_service
+            .repo
+            .retrieve_from_token(&token)
+            .await
+            .expect("Failed to fetch saved subscription.");
+
+        Some((saved, token))
+    }
 }
 
 static TRACING: Lazy<()> = Lazy::new(|| {
@@ -125,11 +173,9 @@ static TRACING: Lazy<()> = Lazy::new(|| {
     let default_filter_level = c.general.log_level;
     let subscriber_name = "test".to_string();
     if std::env::var("TEST_LOG").is_ok() {
-        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
-        init_subscriber(subscriber);
+        init_logger(&subscriber_name, &default_filter_level, std::io::stdout);
     } else {
-        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::sink);
-        init_subscriber(subscriber);
+        init_logger(&subscriber_name, &default_filter_level, std::io::sink);
     }
 });
 
@@ -146,20 +192,35 @@ pub async fn spawn_app() -> TestApp {
 
     configure_database(&configuration.database).await;
 
-    let application = Application::build(configuration.clone())
-        .await
-        .expect("Failed to build application");
+    let email_client = Arc::new(EmailClient::new(configuration.email_client));
+    let repo = Arc::new(PostgresDb::new(&configuration.database));
+    let subscription_service = Subscription::new(Arc::clone(&repo), Arc::clone(&email_client));
+    let newsletter_service = Blog::new(Arc::clone(&repo), Arc::clone(&email_client));
+
+    let application = Application::build(
+        subscription_service,
+        newsletter_service,
+        configuration.application.clone(),
+    )
+    .await
+    .expect("Failed to build application");
+
     let application_port = application.port();
+    let subscription_service = application.subscription_service();
+    let newsletter_service = application.newsletter_service();
+
     let _ = tokio::spawn(application.run_until_stopped());
 
     let test_app = TestApp {
         address: format!("http://localhost:{}", application_port),
         port: application_port,
-        db_pool: get_connection_pool(&configuration.database),
+        subscription_service,
+        newsletter_service,
         email_server,
         test_user: TestUser::generate(),
     };
-    test_app.test_user.store(&test_app.db_pool).await;
+
+    test_app.test_user.store(repo.clone()).await;
     test_app
 }
 
