@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use crate::domain::{
-    auth::credentials::Credentials,
+    auth::credentials::{Credentials, CredentialsError},
     newsletter::{
         errors::NewsletterError,
         models::newsletter::Newsletter,
@@ -11,7 +11,7 @@ use crate::domain::{
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
-pub struct Blog<R, N>
+pub struct BlogDelivery<R, N>
 where
     R: NewsletterRepository,
     N: NewsletterNotifier,
@@ -20,7 +20,7 @@ where
     pub notifier: Arc<N>,
 }
 
-impl<R, N> Blog<R, N>
+impl<R, N> BlogDelivery<R, N>
 where
     R: NewsletterRepository,
     N: NewsletterNotifier,
@@ -31,28 +31,16 @@ where
 }
 
 #[async_trait]
-impl<R, N> NewsletterService for Blog<R, N>
+impl<R, N> NewsletterService for BlogDelivery<R, N>
 where
     R: NewsletterRepository,
     N: NewsletterNotifier,
 {
     async fn send_newsletter(
         &self,
-        credentials: Credentials,
         newsletter: Newsletter,
         base_url: &str,
     ) -> Result<(), NewsletterError> {
-        tracing::Span::current()
-            .record("username", tracing::field::display(credentials.username()));
-
-        let stored_credentials = self
-            .repo
-            .get_stored_credentials(credentials.username())
-            .await?;
-
-        let user_id = credentials.validate_credentials(stored_credentials).await?;
-        tracing::Span::current().record("user_id", tracing::field::display(&user_id));
-
         let confirmed_subscribers_with_tokens = self.repo.get_confirmed_subscribers().await?;
 
         for subscriber_with_token in confirmed_subscribers_with_tokens {
@@ -78,6 +66,19 @@ where
             }
         }
 
+        Ok(())
+    }
+
+    async fn validate_credentials(&self, credentials: Credentials) -> Result<(), CredentialsError> {
+        tracing::Span::current()
+            .record("username", tracing::field::display(credentials.username()));
+        let stored_credentials = self
+            .repo
+            .get_stored_credentials(credentials.username())
+            .await?;
+
+        let user_id = credentials.validate(stored_credentials).await?;
+        tracing::Span::current().record("user_id", tracing::field::display(&user_id));
         Ok(())
     }
 }

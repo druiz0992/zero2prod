@@ -8,10 +8,10 @@ use wiremock::MockServer;
 use zero2prod::domain::new_subscriber::{
     models::{subscriber::NewSubscriber, token::SubscriptionToken},
     ports::SubscriberRepository,
-    service::Subscription,
+    service::BlogSubscription,
 };
-use zero2prod::domain::newsletter::service::Blog;
-use zero2prod::inbound::http::Application;
+use zero2prod::domain::newsletter::service::BlogDelivery;
+use zero2prod::inbound::http::{Application, SharedNewsletterState, SharedSubscriptionState};
 use zero2prod::outbound::{db::postgres_db::PostgresDb, notifier::email_client::EmailClient};
 use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
@@ -64,15 +64,24 @@ pub struct ConfirmationLinks {
 
 pub struct TestApp {
     pub address: String,
-    pub subscription_service: Arc<Subscription<PostgresDb, EmailClient>>,
+    pub subscription_state: SharedSubscriptionState<BlogSubscription<PostgresDb, EmailClient>>,
     #[allow(dead_code)]
-    pub newsletter_service: Arc<Blog<PostgresDb, EmailClient>>,
+    pub newsletter_state: SharedNewsletterState<BlogDelivery<PostgresDb, EmailClient>>,
     pub email_server: MockServer,
     pub port: u16,
     pub test_user: TestUser,
 }
 
 impl TestApp {
+    pub fn subscription_service(&self) -> &BlogSubscription<PostgresDb, EmailClient> {
+        self.subscription_state.subscription_service()
+    }
+
+    pub fn subscription_repo(&self) -> Arc<PostgresDb> {
+        let subscription_service = self.subscription_service();
+        subscription_service.repo.clone()
+    }
+
     pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
         reqwest::Client::new()
             .post(&format!("{}/subscriptions", &self.address))
@@ -158,7 +167,7 @@ impl TestApp {
             .unwrap();
 
         let saved = self
-            .subscription_service
+            .subscription_service()
             .repo
             .retrieve_from_token(&token)
             .await
@@ -194,8 +203,8 @@ pub async fn spawn_app() -> TestApp {
 
     let email_client = Arc::new(EmailClient::new(configuration.email_client));
     let repo = Arc::new(PostgresDb::new(&configuration.database));
-    let subscription_service = Subscription::new(Arc::clone(&repo), Arc::clone(&email_client));
-    let newsletter_service = Blog::new(Arc::clone(&repo), Arc::clone(&email_client));
+    let subscription_service = BlogSubscription::new(Arc::clone(&repo), Arc::clone(&email_client));
+    let newsletter_service = BlogDelivery::new(Arc::clone(&repo), Arc::clone(&email_client));
 
     let application = Application::build(
         subscription_service,
@@ -206,16 +215,16 @@ pub async fn spawn_app() -> TestApp {
     .expect("Failed to build application");
 
     let application_port = application.port();
-    let subscription_service = application.subscription_service();
-    let newsletter_service = application.newsletter_service();
+    let subscription_state = application.subscription_state();
+    let newsletter_state = application.newsletter_state();
 
     let _ = tokio::spawn(application.run_until_stopped());
 
     let test_app = TestApp {
         address: format!("http://localhost:{}", application_port),
         port: application_port,
-        subscription_service,
-        newsletter_service,
+        subscription_state,
+        newsletter_state,
         email_server,
         test_user: TestUser::generate(),
     };

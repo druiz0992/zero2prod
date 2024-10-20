@@ -2,7 +2,7 @@ use crate::{
     domain::new_subscriber::{
         models::subscriber::NewSubscriberRequest, ports::SubscriptionService,
     },
-    inbound::http::{AppError, SubscriptionState},
+    inbound::http::{errors::AppError, SharedSubscriptionState},
 };
 use actix_web::{web, HttpResponse};
 
@@ -16,7 +16,7 @@ use actix_web::{web, HttpResponse};
 )]
 pub async fn subscribe<SS: SubscriptionService>(
     subscriber_request: web::Form<NewSubscriberRequest>,
-    state: web::Data<SubscriptionState<SS>>,
+    state: web::Data<SharedSubscriptionState<SS>>,
 ) -> Result<HttpResponse, AppError> {
     let subscriber_request = subscriber_request.0;
     state

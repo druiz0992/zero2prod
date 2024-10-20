@@ -6,6 +6,7 @@ use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use once_cell::sync::Lazy;
 use secrecy::{ExposeSecret, Secret};
 
+#[derive(serde::Deserialize)]
 pub struct Credentials {
     username: String,
     password: Secret<String>,
@@ -24,7 +25,7 @@ impl Credentials {
     }
 
     #[tracing::instrument(name = "Validate credentials", skip(self, stored_credentials))]
-    pub async fn validate_credentials(
+    pub async fn validate(
         self,
         stored_credentials: Option<StoredCredentials>,
     ) -> Result<uuid::Uuid, CredentialsError> {

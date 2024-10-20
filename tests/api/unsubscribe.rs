@@ -64,7 +64,8 @@ async fn unsubscribe_request_with_unknown_subscriber_id_is_rejected_with_500() {
 
     app.post_subscriptions(body.into()).await;
     if let Some((subscriber, token)) = app.confirm_subscription().await {
-        let pool = app.subscription_service.repo.pool();
+        let repo = app.subscription_repo();
+        let pool = repo.pool();
         let id = subscriber.id;
         sqlx::query!("ALTER TABLE subscription_tokens DROP CONSTRAINT subscription_tokens_subscriber_id_fkey;").execute(pool).await.unwrap();
         sqlx::query!("DELETE FROM subscriptions WHERE id=$1", id)
@@ -102,7 +103,8 @@ async fn sucessful_unconfirmed_unsubscription_maintains_subscriber() {
         let response = app
             .get_subscription_unsubscribe(token.as_str().into())
             .await;
-        let pool = app.subscription_service.repo.pool();
+        let repo = app.subscription_repo();
+        let pool = repo.pool();
         let record = sqlx::query!(
             "SELECT status FROM subscriptions WHERE email = $1",
             subscriber.email.as_str()
@@ -138,7 +140,8 @@ async fn sucessful_confirmed_unsubscription_deletes_subscriber() {
         let response = app
             .get_subscription_unsubscribe(token.as_str().into())
             .await;
-        let pool = app.subscription_service.repo.pool();
+        let repo = app.subscription_repo();
+        let pool = repo.pool();
         let record = sqlx::query!(
             "SELECT status FROM subscriptions WHERE email = $1",
             subscriber.email.as_str()

@@ -1,6 +1,6 @@
 use zero2prod::configuration::get_configuration;
-use zero2prod::domain::new_subscriber::service::Subscription;
-use zero2prod::domain::newsletter::service::Blog;
+use zero2prod::domain::new_subscriber::service::BlogSubscription;
+use zero2prod::domain::newsletter::service::BlogDelivery;
 use zero2prod::inbound::http::Application;
 use zero2prod::outbound::db::postgres_db::PostgresDb;
 use zero2prod::outbound::notifier::email_client::EmailClient;
@@ -15,8 +15,8 @@ async fn main() -> std::io::Result<()> {
 
     let email_client = Arc::new(EmailClient::new(configuration.email_client));
     let repo = Arc::new(PostgresDb::new(&configuration.database));
-    let newsletter_service = Blog::new(Arc::clone(&repo), Arc::clone(&email_client));
-    let subscription_service = Subscription::new(Arc::clone(&repo), Arc::clone(&email_client));
+    let newsletter_service = BlogDelivery::new(Arc::clone(&repo), Arc::clone(&email_client));
+    let subscription_service = BlogSubscription::new(Arc::clone(&repo), Arc::clone(&email_client));
     let application = Application::build(
         subscription_service,
         newsletter_service,

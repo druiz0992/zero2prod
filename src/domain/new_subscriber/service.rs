@@ -12,7 +12,7 @@ use super::{
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub struct Subscription<R, N>
+pub struct BlogSubscription<R, N>
 where
     R: SubscriberRepository,
     N: SubscriptionNotifier,
@@ -21,7 +21,7 @@ where
     pub notifier: Arc<N>,
 }
 
-impl<R, N> Subscription<R, N>
+impl<R, N> BlogSubscription<R, N>
 where
     R: SubscriberRepository,
     N: SubscriptionNotifier,
@@ -32,7 +32,7 @@ where
 }
 
 #[async_trait]
-impl<R, N> SubscriptionService for Subscription<R, N>
+impl<R, N> SubscriptionService for BlogSubscription<R, N>
 where
     R: SubscriberRepository,
     N: SubscriptionNotifier,
