@@ -144,7 +144,8 @@ async fn if_the_link_returned_by_subscribe_doesnt_exist_return_401() {
         .unwrap();
 
     if let Some(_) = confirmation_links.html.query() {
-        let pool = app.subscription_service.repo.pool();
+        let repo = app.subscription_repo();
+        let pool = repo.pool();
         sqlx::query!(
             "DELETE FROM subscription_tokens WHERE subscription_token=$1",
             token

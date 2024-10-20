@@ -39,7 +39,7 @@ async fn subscribe_persists_the_new_subscriber() {
     app.post_subscriptions(body.into()).await;
 
     let (updated_subscriber, _) = app
-        .subscription_service
+        .subscription_service()
         .repo
         .retrieve_or_insert(subscriber_request, token)
         .await
@@ -159,7 +159,8 @@ async fn subscribe_fails_if_there_is_a_fatal_database_error() {
     let app = spawn_app().await;
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
     // Sabotage the db
-    let pool = app.subscription_service.repo.pool();
+    let repo = app.subscription_repo();
+    let pool = repo.pool();
     sqlx::query!("ALTER TABLE subscriptions DROP COLUMN email;",)
         .execute(pool)
         .await

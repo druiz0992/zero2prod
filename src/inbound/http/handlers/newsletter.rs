@@ -10,7 +10,7 @@ use crate::{
             ports::NewsletterService,
         },
     },
-    inbound::http::{auth, AppError, NewsletterState},
+    inbound::http::{auth, errors::AppError, NewsletterState, SharedNewsletterState},
     outbound::telemetry::spawn_blocking_with_tracing,
 };
 use actix_web::{
@@ -28,7 +28,7 @@ use sqlx::PgPool;
 )]
 pub async fn publish_newsletter<NS: NewsletterService>(
     body: web::Json<NewsletterDto>,
-    state: web::Data<NewsletterState<NS>>,
+    state: web::Data<SharedNewsletterState<NS>>,
     request: HttpRequest,
 ) -> Result<HttpResponse, AppError> {
     let newsletter = body.into_inner();
@@ -38,7 +38,12 @@ pub async fn publish_newsletter<NS: NewsletterService>(
 
     state
         .newsletter_service
-        .send_newsletter(credentials, newsletter, base_url)
+        .validate_credentials(credentials)
+        .await?;
+
+    state
+        .newsletter_service
+        .send_newsletter(newsletter, base_url)
         .await?;
 
     Ok(HttpResponse::Ok().finish())

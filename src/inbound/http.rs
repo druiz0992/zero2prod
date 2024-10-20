@@ -1,22 +1,24 @@
 use crate::configuration::ApplicationSettings;
-use crate::domain::auth::credentials::CredentialsError;
-use crate::domain::new_subscriber::{errors::SubscriberError, ports::SubscriptionService};
-use crate::domain::newsletter::{errors::NewsletterError, ports::NewsletterService};
+use crate::domain::new_subscriber::ports::SubscriptionService;
+use crate::domain::newsletter::ports::NewsletterService;
 use crate::inbound::http::handlers::{
-    confirm, health_check, publish_newsletter, subscribe, unsubscribe,
+    confirm, health_check, home, login, login_form, publish_newsletter, subscribe, unsubscribe,
 };
 use actix_web::dev::Server;
-use actix_web::{http::StatusCode, web, App, HttpServer, ResponseError};
+use actix_web::{web, App, HttpServer};
 use std::net::TcpListener;
 use std::sync::Arc;
 use tracing_actix_web::TracingLogger;
 
-use actix_web::http::header;
-use actix_web::http::header::HeaderValue;
-use actix_web::HttpResponse;
+use actix_web::web::Data;
+
+use secrecy::Secret;
 
 mod auth;
+mod config;
+mod errors;
 mod handlers;
+
 pub struct Application<SS, NS>
 where
     SS: SubscriptionService,
@@ -24,25 +26,56 @@ where
 {
     port: u16,
     server: Server,
-    subscription_service: Arc<SS>,
-    newsletter_service: Arc<NS>,
+    subscription_state: SharedSubscriptionState<SS>,
+    newsletter_state: SharedNewsletterState<NS>,
 }
 
 #[derive(Debug, Clone)]
-struct NewsletterState<NS: NewsletterService> {
-    newsletter_service: Arc<NS>,
+pub struct NewsletterState<NS: NewsletterService> {
+    newsletter_service: NS,
     base_url: String,
 }
 
 #[derive(Debug, Clone)]
-struct SubscriptionState<SS: SubscriptionService> {
-    subscription_service: Arc<SS>,
+pub struct SubscriptionState<SS: SubscriptionService> {
+    subscription_service: SS,
 }
+
+pub type SharedSubscriptionState<SS> = Arc<SubscriptionState<SS>>;
+
+impl<SS: SubscriptionService> SubscriptionState<SS> {
+    fn new(subscription_service: SS) -> SharedSubscriptionState<SS> {
+        Arc::new(Self {
+            subscription_service,
+        })
+    }
+    pub fn subscription_service(&self) -> &SS {
+        &self.subscription_service
+    }
+}
+
+pub type SharedNewsletterState<NS> = Arc<NewsletterState<NS>>;
+
+impl<NS: NewsletterService> NewsletterState<NS> {
+    fn new(newsletter_service: NS, base_url: String) -> SharedNewsletterState<NS> {
+        Arc::new(Self {
+            newsletter_service,
+            base_url,
+        })
+    }
+    pub fn newsletter_service(&self) -> &NS {
+        &self.newsletter_service
+    }
+}
+
+#[derive(Clone)]
+pub struct HmacSecret(pub Secret<String>);
 
 fn run<SS: SubscriptionService, NS: NewsletterService>(
     listener: TcpListener,
-    subscription_state: SubscriptionState<SS>,
-    newsletter_state: NewsletterState<NS>,
+    hmac_secret: Secret<String>,
+    subscription_state: SharedSubscriptionState<SS>,
+    newsletter_state: SharedNewsletterState<NS>,
 ) -> Result<Server, std::io::Error> {
     let subscription_state = web::Data::new(subscription_state);
     let newsletter_state = web::Data::new(newsletter_state);
@@ -50,10 +83,12 @@ fn run<SS: SubscriptionService, NS: NewsletterService>(
     let server = HttpServer::new(move || {
         App::new()
             .wrap(TracingLogger::default())
-            .route("/", web::get().to(health_check))
+            .route("/", web::get().to(home))
             .route("/health_check", web::get().to(health_check))
             .app_data(newsletter_state.clone())
             .route("/newsletters", web::post().to(publish_newsletter::<NS>))
+            .route("/login", web::get().to(login_form))
+            .route("/login", web::post().to(login::<NS>))
             .app_data(subscription_state.clone())
             .route("/subscriptions", web::post().to(subscribe::<SS>))
             .route("/subscriptions/confirm", web::get().to(confirm::<SS>))
@@ -61,6 +96,7 @@ fn run<SS: SubscriptionService, NS: NewsletterService>(
                 "/subscriptions/unsubscribe",
                 web::get().to(unsubscribe::<SS>),
             )
+            .app_data(Data::new(HmacSecret(hmac_secret.clone())))
     })
     .listen(listener)?
     .run();
@@ -78,23 +114,21 @@ impl<SS: SubscriptionService, NS: NewsletterService> Application<SS, NS> {
         let listener = TcpListener::bind(address)?;
         let port = listener.local_addr().unwrap().port();
 
-        let newsletter_service = Arc::new(newsletter_service);
-        let newsletter_state = NewsletterState {
-            newsletter_service: Arc::clone(&newsletter_service),
-            base_url: configuration.base_url,
-        };
+        let newsletter_state = NewsletterState::new(newsletter_service, configuration.base_url);
+        let subscription_state = SubscriptionState::new(subscription_service);
 
-        let subscription_service = Arc::new(subscription_service);
-        let subscription_state = SubscriptionState {
-            subscription_service: Arc::clone(&subscription_service),
-        };
+        let server: Server = run(
+            listener,
+            configuration.hmac_secret,
+            Arc::clone(&subscription_state),
+            Arc::clone(&newsletter_state),
+        )?;
 
-        let server = run(listener, subscription_state, newsletter_state)?;
         Ok(Self {
             port,
             server,
-            subscription_service,
-            newsletter_service,
+            subscription_state: Arc::clone(&subscription_state),
+            newsletter_state: Arc::clone(&newsletter_state),
         })
     }
 
@@ -102,84 +136,15 @@ impl<SS: SubscriptionService, NS: NewsletterService> Application<SS, NS> {
         self.port
     }
 
-    pub fn subscription_service(&self) -> Arc<SS> {
-        self.subscription_service.clone()
+    pub fn subscription_state(&self) -> SharedSubscriptionState<SS> {
+        self.subscription_state.clone()
     }
 
-    pub fn newsletter_service(&self) -> Arc<NS> {
-        self.newsletter_service.clone()
+    pub fn newsletter_state(&self) -> SharedNewsletterState<NS> {
+        self.newsletter_state.clone()
     }
 
     pub async fn run_until_stopped(self) -> Result<(), std::io::Error> {
         self.server.await
-    }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum AppError {
-    #[error("Validation error: {0}")]
-    ValidationError(String),
-    #[error("Subscriber not found: {0}")]
-    NotFound(String),
-    #[error("Subscriber not authenticated: {0}")]
-    AuthError(String),
-    #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
-}
-
-impl From<SubscriberError> for AppError {
-    fn from(error: SubscriberError) -> Self {
-        match error {
-            SubscriberError::ValidationError(s) => AppError::ValidationError(s),
-            SubscriberError::AuthError(s) => AppError::AuthError(s),
-            SubscriberError::NotFound(s) => AppError::NotFound(s),
-            SubscriberError::Unexpected(s) => AppError::Unexpected(s),
-        }
-    }
-}
-
-impl From<NewsletterError> for AppError {
-    fn from(error: NewsletterError) -> Self {
-        match error {
-            NewsletterError::ValidationError(s) => AppError::ValidationError(s),
-            NewsletterError::NotFound(s) => AppError::NotFound(s),
-            NewsletterError::Unexpected(s) => AppError::Unexpected(s),
-            NewsletterError::AuthError(s) => AppError::AuthError(s),
-        }
-    }
-}
-impl From<CredentialsError> for AppError {
-    fn from(error: CredentialsError) -> Self {
-        match error {
-            CredentialsError::Unexpected(s) => AppError::Unexpected(s),
-            CredentialsError::AuthError(s) => AppError::AuthError(s),
-        }
-    }
-}
-
-impl ResponseError for AppError {
-    fn status_code(&self) -> StatusCode {
-        match self {
-            AppError::ValidationError(_) => StatusCode::BAD_REQUEST,
-            AppError::Unexpected(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            AppError::NotFound(_) => StatusCode::NOT_FOUND,
-            AppError::AuthError(_) => StatusCode::UNAUTHORIZED,
-        }
-    }
-
-    fn error_response(&self) -> actix_web::HttpResponse<actix_web::body::BoxBody> {
-        match self {
-            AppError::ValidationError(_) => HttpResponse::new(StatusCode::BAD_REQUEST),
-            AppError::Unexpected(_) => HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR),
-            AppError::NotFound(_) => HttpResponse::new(StatusCode::NOT_FOUND),
-            AppError::AuthError(_) => {
-                let mut response = HttpResponse::new(StatusCode::UNAUTHORIZED);
-                let header_value = HeaderValue::from_str(r#"Basic realm="publish""#).unwrap();
-                response
-                    .headers_mut()
-                    .insert(header::WWW_AUTHENTICATE, header_value);
-                response
-            }
-        }
     }
 }
