@@ -1,19 +1,18 @@
 use crate::domain::auth::credentials::CredentialsError;
 use crate::domain::newsletter::ports::NewsletterService;
-use crate::inbound::http::{HmacSecret, NewsletterState};
+use crate::inbound::http::auth::secure_query::SecureQuery;
+use crate::inbound::http::{HmacSecret, SharedNewsletterState};
 use actix_web::error::InternalError;
 use actix_web::http::header::LOCATION;
 use actix_web::web;
 use actix_web::HttpResponse;
-use hmac::{Hmac, Mac};
-use secrecy::ExposeSecret;
 
 use crate::domain::auth::credentials::Credentials;
 
 #[tracing::instrument(skip(credentials, state, secret))]
 pub async fn login<NS: NewsletterService>(
     credentials: web::Form<Credentials>,
-    state: web::Data<NewsletterState<NS>>,
+    state: web::Data<SharedNewsletterState<NS>>,
     secret: web::Data<HmacSecret>,
 ) -> Result<HttpResponse, InternalError<CredentialsError>> {
     let credentials = credentials.0;
@@ -39,16 +38,11 @@ fn handle_login_failure(
     secret: web::Data<HmacSecret>,
 ) -> Result<HttpResponse, InternalError<CredentialsError>> {
     let query_string = format!("error={}", urlencoding::Encoded::new(error.to_string()));
-    let hmac_tag = {
-        let mut mac =
-            Hmac::<sha2::Sha256>::new_from_slice(secret.0.expose_secret().as_bytes()).unwrap();
-        mac.update(query_string.as_bytes());
-        mac.finalize().into_bytes()
-    };
+    let secure_query = SecureQuery::new(query_string, secret.as_ref());
     let response = HttpResponse::SeeOther()
         .insert_header((
             LOCATION,
-            format!("/login?{}&tag={:x}", query_string, hmac_tag),
+            format!("/login?{}&tag={}", secure_query.query(), secure_query.tag(),),
         ))
         .finish();
     Err(InternalError::from_response(error, response))

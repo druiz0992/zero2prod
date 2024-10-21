@@ -1,6 +1,7 @@
 use crate::configuration::ApplicationSettings;
 use crate::domain::new_subscriber::ports::SubscriptionService;
 use crate::domain::newsletter::ports::NewsletterService;
+use crate::inbound::http::auth::secure_query::HmacSecret;
 use crate::inbound::http::handlers::{
     confirm, health_check, home, login, login_form, publish_newsletter, subscribe, unsubscribe,
 };
@@ -67,9 +68,6 @@ impl<NS: NewsletterService> NewsletterState<NS> {
         &self.newsletter_service
     }
 }
-
-#[derive(Clone)]
-pub struct HmacSecret(pub Secret<String>);
 
 fn run<SS: SubscriptionService, NS: NewsletterService>(
     listener: TcpListener,

@@ -10,7 +10,7 @@ use crate::{
             ports::NewsletterService,
         },
     },
-    inbound::http::{auth, errors::AppError, NewsletterState, SharedNewsletterState},
+    inbound::http::{auth::basic::basic_authentication, errors::AppError, SharedNewsletterState},
     outbound::telemetry::spawn_blocking_with_tracing,
 };
 use actix_web::{
@@ -33,7 +33,7 @@ pub async fn publish_newsletter<NS: NewsletterService>(
 ) -> Result<HttpResponse, AppError> {
     let newsletter = body.into_inner();
     let newsletter = newsletter.try_into()?;
-    let credentials = auth::basic_authentication(request)?;
+    let credentials = basic_authentication(request)?;
     let base_url = &state.base_url;
 
     state
