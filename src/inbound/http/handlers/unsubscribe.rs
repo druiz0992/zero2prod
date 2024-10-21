@@ -10,6 +10,6 @@ pub async fn unsubscribe<SS: SubscriptionService>(
     req: web::Query<SubscriptionTokenRequest>,
 ) -> Result<HttpResponse, AppError> {
     let req = req.into_inner();
-    state.subscription_service.delete(req).await?;
+    state.subscription_service().delete(req).await?;
     Ok(HttpResponse::Ok().finish())
 }

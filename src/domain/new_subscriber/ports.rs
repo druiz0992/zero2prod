@@ -11,7 +11,7 @@ use super::{
 
 #[async_trait]
 ///  Represents a store of subscriber data
-pub trait SubscriberRepository: Send + Sync + 'static {
+pub trait SubscriberRepository: Clone + Send + Sync + 'static {
     /// Asynchronously retrieves a subscriber and token if it exists,
     ///  or creates a new entry for the provided `NewSubscriberRequest`
     async fn retrieve_or_insert(
@@ -33,7 +33,7 @@ pub trait SubscriberRepository: Send + Sync + 'static {
 }
 
 #[async_trait]
-pub trait SubscriptionService: Send + Sync + 'static {
+pub trait SubscriptionService: Clone + Send + Sync + 'static {
     async fn new_subscriber(
         &self,
         req: NewSubscriberRequest,
@@ -49,7 +49,7 @@ pub trait SubscriptionService: Send + Sync + 'static {
 }
 
 #[async_trait]
-pub trait SubscriptionNotifier: Send + Sync + 'static {
+pub trait SubscriptionNotifier: Clone + Send + Sync + 'static {
     async fn send_subscriber_notification(
         &self,
         recipient: &SubscriberEmail,

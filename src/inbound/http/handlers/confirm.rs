@@ -10,6 +10,6 @@ pub async fn confirm<SS: SubscriptionService>(
     state: web::Data<SharedSubscriptionState<SS>>,
 ) -> Result<HttpResponse, AppError> {
     let req = req.into_inner();
-    state.subscription_service.confirm(req).await?;
+    state.subscription_service().confirm(req).await?;
     Ok(HttpResponse::Ok().finish())
 }

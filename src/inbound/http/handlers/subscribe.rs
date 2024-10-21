@@ -20,7 +20,7 @@ pub async fn subscribe<SS: SubscriptionService>(
 ) -> Result<HttpResponse, AppError> {
     let subscriber_request = subscriber_request.0;
     state
-        .subscription_service
+        .subscription_service()
         .new_subscriber(subscriber_request)
         .await?;
 

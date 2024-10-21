@@ -1,7 +1,7 @@
 use crate::domain::auth::credentials::CredentialsError;
-use crate::domain::newsletter::ports::NewsletterService;
+use crate::domain::auth::ports::AuthService;
 use crate::inbound::http::auth::secure_query::SecureQuery;
-use crate::inbound::http::{HmacSecret, SharedNewsletterState};
+use crate::inbound::http::{HmacSecret, SharedAuthState};
 use actix_web::error::InternalError;
 use actix_web::http::header::LOCATION;
 use actix_web::web;
@@ -10,18 +10,14 @@ use actix_web::HttpResponse;
 use crate::domain::auth::credentials::Credentials;
 
 #[tracing::instrument(skip(credentials, state, secret))]
-pub async fn login<NS: NewsletterService>(
+pub async fn login<AS: AuthService>(
     credentials: web::Form<Credentials>,
-    state: web::Data<SharedNewsletterState<NS>>,
+    state: web::Data<SharedAuthState<AS>>,
     secret: web::Data<HmacSecret>,
 ) -> Result<HttpResponse, InternalError<CredentialsError>> {
     let credentials = credentials.0;
 
-    match state
-        .newsletter_service
-        .validate_credentials(credentials)
-        .await
-    {
+    match state.auth_service().validate_credentials(credentials).await {
         Ok(_) => handle_login_success(),
         Err(error) => handle_login_failure(error, secret),
     }
@@ -37,8 +33,7 @@ fn handle_login_failure(
     error: CredentialsError,
     secret: web::Data<HmacSecret>,
 ) -> Result<HttpResponse, InternalError<CredentialsError>> {
-    let query_string = format!("error={}", urlencoding::Encoded::new(error.to_string()));
-    let secure_query = SecureQuery::new(query_string, secret.as_ref());
+    let secure_query = SecureQuery::new(error.to_string(), secret.as_ref());
     let response = HttpResponse::SeeOther()
         .insert_header((
             LOCATION,

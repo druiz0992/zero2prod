@@ -5,13 +5,15 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::sync::Arc;
 use uuid::Uuid;
 use wiremock::MockServer;
+use zero2prod::domain::auth::service::BlogAuth;
 use zero2prod::domain::new_subscriber::{
     models::{subscriber::NewSubscriber, token::SubscriptionToken},
     ports::SubscriberRepository,
     service::BlogSubscription,
 };
 use zero2prod::domain::newsletter::service::BlogDelivery;
-use zero2prod::inbound::http::{Application, SharedNewsletterState, SharedSubscriptionState};
+use zero2prod::inbound::http::state::{SharedNewsletterState, SharedSubscriptionState};
+use zero2prod::inbound::http::Application;
 use zero2prod::outbound::{db::postgres_db::PostgresDb, notifier::email_client::EmailClient};
 use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
@@ -205,10 +207,12 @@ pub async fn spawn_app() -> TestApp {
     let repo = Arc::new(PostgresDb::new(&configuration.database));
     let subscription_service = BlogSubscription::new(Arc::clone(&repo), Arc::clone(&email_client));
     let newsletter_service = BlogDelivery::new(Arc::clone(&repo), Arc::clone(&email_client));
+    let auth_service = BlogAuth::new(Arc::clone(&repo));
 
     let application = Application::build(
         subscription_service,
         newsletter_service,
+        auth_service,
         configuration.application.clone(),
     )
     .await

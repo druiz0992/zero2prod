@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 
 use crate::domain::{
-    auth::credentials::{Credentials, CredentialsError, StoredCredentials},
     new_subscriber::models::{email::SubscriberEmail, token::SubscriptionToken},
     newsletter::{
         errors::NewsletterError,
@@ -11,10 +10,6 @@ use crate::domain::{
 
 #[async_trait]
 pub trait NewsletterRepository: Clone + Send + Sync + 'static {
-    async fn get_stored_credentials(
-        &self,
-        username: &str,
-    ) -> Result<Option<StoredCredentials>, CredentialsError>;
     async fn get_confirmed_subscribers(
         &self,
     ) -> Result<Vec<Result<(ConfirmedSubscriber, SubscriptionToken), NewsletterError>>, anyhow::Error>;
@@ -27,7 +22,6 @@ pub trait NewsletterService: Clone + Send + Sync + 'static {
         newsletter: Newsletter,
         base_url: &str,
     ) -> Result<(), NewsletterError>;
-    async fn validate_credentials(&self, credentials: Credentials) -> Result<(), CredentialsError>;
 }
 
 #[async_trait]

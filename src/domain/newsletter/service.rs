@@ -1,12 +1,9 @@
 use async_trait::async_trait;
 
-use crate::domain::{
-    auth::credentials::{Credentials, CredentialsError},
-    newsletter::{
-        errors::NewsletterError,
-        models::newsletter::Newsletter,
-        ports::{NewsletterNotifier, NewsletterRepository, NewsletterService},
-    },
+use crate::domain::newsletter::{
+    errors::NewsletterError,
+    models::newsletter::Newsletter,
+    ports::{NewsletterNotifier, NewsletterRepository, NewsletterService},
 };
 use std::sync::Arc;
 
@@ -66,19 +63,6 @@ where
             }
         }
 
-        Ok(())
-    }
-
-    async fn validate_credentials(&self, credentials: Credentials) -> Result<(), CredentialsError> {
-        tracing::Span::current()
-            .record("username", tracing::field::display(credentials.username()));
-        let stored_credentials = self
-            .repo
-            .get_stored_credentials(credentials.username())
-            .await?;
-
-        let user_id = credentials.validate(stored_credentials).await?;
-        tracing::Span::current().record("user_id", tracing::field::display(&user_id));
         Ok(())
     }
 }
