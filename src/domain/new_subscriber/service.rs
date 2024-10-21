@@ -11,7 +11,7 @@ use super::{
 };
 use std::sync::Arc;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BlogSubscription<R, N>
 where
     R: SubscriberRepository,

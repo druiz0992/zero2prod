@@ -1,13 +1,17 @@
 use crate::configuration::ApplicationSettings;
+use crate::domain::auth::ports::AuthService;
 use crate::domain::new_subscriber::ports::SubscriptionService;
 use crate::domain::newsletter::ports::NewsletterService;
+use crate::inbound::http::auth::secure_query::HmacSecret;
 use crate::inbound::http::handlers::{
     confirm, health_check, home, login, login_form, publish_newsletter, subscribe, unsubscribe,
+};
+use crate::inbound::http::state::{
+    SharedAuthState, SharedNewsletterState, SharedSubscriptionState,
 };
 use actix_web::dev::Server;
 use actix_web::{web, App, HttpServer};
 use std::net::TcpListener;
-use std::sync::Arc;
 use tracing_actix_web::TracingLogger;
 
 use actix_web::web::Data;
@@ -18,77 +22,42 @@ mod auth;
 mod config;
 mod errors;
 mod handlers;
+pub mod state;
 
-pub struct Application<SS, NS>
+pub struct Application<SS, NS, AS>
 where
     SS: SubscriptionService,
     NS: NewsletterService,
+    AS: AuthService,
 {
     port: u16,
     server: Server,
     subscription_state: SharedSubscriptionState<SS>,
     newsletter_state: SharedNewsletterState<NS>,
+    auth_state: SharedAuthState<AS>,
 }
 
-#[derive(Debug, Clone)]
-pub struct NewsletterState<NS: NewsletterService> {
-    newsletter_service: NS,
-    base_url: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct SubscriptionState<SS: SubscriptionService> {
-    subscription_service: SS,
-}
-
-pub type SharedSubscriptionState<SS> = Arc<SubscriptionState<SS>>;
-
-impl<SS: SubscriptionService> SubscriptionState<SS> {
-    fn new(subscription_service: SS) -> SharedSubscriptionState<SS> {
-        Arc::new(Self {
-            subscription_service,
-        })
-    }
-    pub fn subscription_service(&self) -> &SS {
-        &self.subscription_service
-    }
-}
-
-pub type SharedNewsletterState<NS> = Arc<NewsletterState<NS>>;
-
-impl<NS: NewsletterService> NewsletterState<NS> {
-    fn new(newsletter_service: NS, base_url: String) -> SharedNewsletterState<NS> {
-        Arc::new(Self {
-            newsletter_service,
-            base_url,
-        })
-    }
-    pub fn newsletter_service(&self) -> &NS {
-        &self.newsletter_service
-    }
-}
-
-#[derive(Clone)]
-pub struct HmacSecret(pub Secret<String>);
-
-fn run<SS: SubscriptionService, NS: NewsletterService>(
+fn run<SS: SubscriptionService, NS: NewsletterService, AS: AuthService>(
     listener: TcpListener,
     hmac_secret: Secret<String>,
     subscription_state: SharedSubscriptionState<SS>,
     newsletter_state: SharedNewsletterState<NS>,
+    auth_state: SharedAuthState<AS>,
 ) -> Result<Server, std::io::Error> {
     let subscription_state = web::Data::new(subscription_state);
     let newsletter_state = web::Data::new(newsletter_state);
+    let auth_state = web::Data::new(auth_state);
 
     let server = HttpServer::new(move || {
         App::new()
             .wrap(TracingLogger::default())
             .route("/", web::get().to(home))
             .route("/health_check", web::get().to(health_check))
+            .app_data(auth_state.clone())
             .app_data(newsletter_state.clone())
-            .route("/newsletters", web::post().to(publish_newsletter::<NS>))
+            .route("/newsletters", web::post().to(publish_newsletter::<NS, AS>))
             .route("/login", web::get().to(login_form))
-            .route("/login", web::post().to(login::<NS>))
+            .route("/login", web::post().to(login::<AS>))
             .app_data(subscription_state.clone())
             .route("/subscriptions", web::post().to(subscribe::<SS>))
             .route("/subscriptions/confirm", web::get().to(confirm::<SS>))
@@ -104,31 +73,41 @@ fn run<SS: SubscriptionService, NS: NewsletterService>(
     Ok(server)
 }
 
-impl<SS: SubscriptionService, NS: NewsletterService> Application<SS, NS> {
+impl<SS, NS, AS> Application<SS, NS, AS>
+where
+    SS: SubscriptionService,
+    NS: NewsletterService,
+    AS: AuthService,
+{
     pub async fn build(
         subscription_service: SS,
         newsletter_service: NS,
+        auth_service: AS,
         configuration: ApplicationSettings,
     ) -> Result<Self, std::io::Error> {
         let address = format!("{}:{}", configuration.host, configuration.port);
         let listener = TcpListener::bind(address)?;
         let port = listener.local_addr().unwrap().port();
 
-        let newsletter_state = NewsletterState::new(newsletter_service, configuration.base_url);
-        let subscription_state = SubscriptionState::new(subscription_service);
+        let newsletter_state =
+            SharedNewsletterState::new(newsletter_service, configuration.base_url);
+        let subscription_state = SharedSubscriptionState::new(subscription_service);
+        let auth_state = SharedAuthState::new(auth_service);
 
         let server: Server = run(
             listener,
             configuration.hmac_secret,
-            Arc::clone(&subscription_state),
-            Arc::clone(&newsletter_state),
+            subscription_state.clone(),
+            newsletter_state.clone(),
+            auth_state.clone(),
         )?;
 
         Ok(Self {
             port,
             server,
-            subscription_state: Arc::clone(&subscription_state),
-            newsletter_state: Arc::clone(&newsletter_state),
+            subscription_state: subscription_state.clone(),
+            newsletter_state: newsletter_state.clone(),
+            auth_state: auth_state.clone(),
         })
     }
 
@@ -142,6 +121,10 @@ impl<SS: SubscriptionService, NS: NewsletterService> Application<SS, NS> {
 
     pub fn newsletter_state(&self) -> SharedNewsletterState<NS> {
         self.newsletter_state.clone()
+    }
+
+    pub fn auth_state(&self) -> SharedAuthState<AS> {
+        self.auth_state.clone()
     }
 
     pub async fn run_until_stopped(self) -> Result<(), std::io::Error> {

@@ -13,6 +13,7 @@ use chrono::Utc;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Executor, PgPool, Postgres, Transaction};
 
+mod auth_repo;
 mod debug;
 mod newsletter_repo;
 mod subscriber_repo;
