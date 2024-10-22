@@ -4,7 +4,8 @@ use crate::domain::new_subscriber::ports::SubscriptionService;
 use crate::domain::newsletter::ports::NewsletterService;
 use crate::inbound::http::handlers::{
     admin::change_password, admin::change_password_form, admin_dashboard, confirm, health_check,
-    home, log_out, login, login_form, publish_newsletter, subscribe, unsubscribe,
+    home, log_out, login, login_form, publish_newsletter, publish_newsletter_form, subscribe,
+    unsubscribe,
 };
 use crate::inbound::http::state::{
     SharedAuthState, SharedNewsletterState, SharedSubscriptionState,
@@ -71,7 +72,6 @@ async fn run<SS: SubscriptionService, NS: NewsletterService, AS: AuthService>(
             .route("/health_check", web::get().to(health_check))
             .app_data(auth_state.clone())
             .app_data(newsletter_state.clone())
-            .route("/newsletters", web::post().to(publish_newsletter::<NS, AS>))
             .route("/login", web::get().to(login_form))
             .route("/login", web::post().to(login::<AS>))
             .app_data(subscription_state.clone())
@@ -84,10 +84,12 @@ async fn run<SS: SubscriptionService, NS: NewsletterService, AS: AuthService>(
             .service(
                 web::scope("/admin")
                     .wrap(from_fn(reject_anonymous_users))
-                    .app_data(auth_state.clone())
+                    .route("/", web::get().to(admin_dashboard::<AS>))
                     .route("/dashboard", web::get().to(admin_dashboard::<AS>))
                     .route("/password", web::get().to(change_password_form))
                     .route("/password", web::post().to(change_password::<AS>))
+                    .route("/newsletters", web::post().to(publish_newsletter::<NS>))
+                    .route("/newsletters", web::get().to(publish_newsletter_form))
                     .route("/logout", web::post().to(log_out)),
             )
     })

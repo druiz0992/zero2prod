@@ -4,12 +4,15 @@ use serde::Deserialize;
 #[derive(Deserialize, Debug)]
 pub struct NewsletterDto {
     pub title: String,
+    #[serde(flatten)]
     pub content: NewsletterContentDto,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct NewsletterContentDto {
+    #[serde(rename = "html_content")]
     pub html: String,
+    #[serde(rename = "text_content")]
     pub text: String,
 }
 
@@ -105,10 +108,8 @@ use claim::assert_err;
 fn test_newsletter_deserialization() {
     let json_data = serde_json::json!({
         "title": "My Newsletter",
-        "content": {
-            "html": "<p>Hello, world!</p>",
-            "text":  "Hello, world!"
-        }
+        "html_content": "<p>Hello, world!</p>",
+        "text_content":  "Hello, world!"
     });
 
     let newsletter_dto: Result<NewsletterDto, serde_json::Error> =

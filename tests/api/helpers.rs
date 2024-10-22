@@ -35,6 +35,14 @@ impl TestUser {
         }
     }
 
+    pub async fn login(&self, app: &TestApp) -> reqwest::Response {
+        app.post_login(&serde_json::json!({
+            "username": &self.username,
+            "password": &self.password
+        }))
+        .await
+    }
+
     async fn store(&self, db: Arc<PostgresDb>) {
         let db = db.as_ref();
         let salt = SaltString::generate(&mut rand::thread_rng());
@@ -130,16 +138,6 @@ impl TestApp {
         email_requests: &wiremock::Request,
     ) -> ConfirmationLinks {
         self.get_confirmation_links(&email_requests)
-    }
-
-    pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
-        self.api_client
-            .post(&format!("{}/newsletters", &self.address))
-            .basic_auth(&self.test_user.username, Some(&self.test_user.password))
-            .json(&body)
-            .send()
-            .await
-            .expect("Failed to execute request.")
     }
 
     pub async fn get_email_requests(&self) -> wiremock::Request {
@@ -240,6 +238,30 @@ impl TestApp {
     pub async fn post_logout(&self) -> reqwest::Response {
         self.api_client
             .post(&format!("{}/admin/logout", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn get_publish_newsletter(&self) -> reqwest::Response {
+        self.api_client
+            .get(&format!("{}/admin/newsletters", &self.address))
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn get_publish_newsletter_html(&self) -> String {
+        self.get_publish_newsletter().await.text().await.unwrap()
+    }
+
+    pub async fn post_publish_newsletter<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
+        self.api_client
+            .post(&format!("{}/admin/newsletters", &self.address))
+            .form(body)
             .send()
             .await
             .expect("Failed to execute request.")

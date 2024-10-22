@@ -23,6 +23,7 @@ pub enum HtmlTemplate {
     Dashboard,
     Home,
     Login,
+    Newsletter,
 }
 
 const TEMPLATES_DIR: &str = "templates";
@@ -31,6 +32,7 @@ const TEMPLATE_CHANGE_PASSWORD: &str = "change_password.html";
 const TEMPLATE_DASHBOARD: &str = "dashboard.html";
 const TEMPLATE_HOME: &str = "home.html";
 const TEMPLATE_LOGIN: &str = "login.html";
+const TEMPLATE_NEWSLETTER: &str = "newsletter.html";
 
 fn get_template_path(template: HtmlTemplate) -> (PathBuf, String) {
     let template_name = match template {
@@ -38,6 +40,7 @@ fn get_template_path(template: HtmlTemplate) -> (PathBuf, String) {
         HtmlTemplate::Dashboard => TEMPLATE_DASHBOARD,
         HtmlTemplate::Home => TEMPLATE_HOME,
         HtmlTemplate::Login => TEMPLATE_LOGIN,
+        HtmlTemplate::Newsletter => TEMPLATE_NEWSLETTER,
     };
 
     (

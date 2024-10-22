@@ -2,6 +2,7 @@ use actix_web::HttpRequest;
 
 use crate::domain::auth::credentials::{Credentials, CredentialsError};
 
+#[allow(dead_code)]
 pub fn basic_authentication(request: HttpRequest) -> Result<Credentials, CredentialsError> {
     let headers = request.headers();
     let header_value = headers
