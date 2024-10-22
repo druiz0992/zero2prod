@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod confirm;
 pub mod health_check;
 pub mod home;
@@ -6,6 +7,7 @@ pub mod newsletter;
 pub mod subscribe;
 pub mod unsubscribe;
 
+pub use admin::*;
 pub use confirm::confirm;
 pub use health_check::health_check;
 pub use home::*;

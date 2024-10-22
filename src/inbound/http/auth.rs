@@ -1,2 +1,5 @@
 pub mod basic;
-pub mod secure_query;
+pub mod middleware;
+pub mod session;
+
+pub use middleware::{reject_anonymous_users, UserId};
