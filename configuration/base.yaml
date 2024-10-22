@@ -2,7 +2,8 @@ general:
   log_level: "debug"
 application:
   port: 8000
-  hmac_secret: "qwR5th-4JkaqW-7iL2e-bNpEf"
+  hmac_secret: "qwR5th-4JkaqW-7iL2e-bNpEf-tY7ikDs-g3tuyui-wRgh6-ssddswFG-G6iH12W-ghJsq"
+  redis_uri: "redis://127.0.0.1:6379"
 database: 
   host: "localhost"
   port: 5432

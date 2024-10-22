@@ -2,11 +2,38 @@ use crate::{
     domain::newsletter::errors::NewsletterError, outbound::telemetry::spawn_blocking_with_tracing,
 };
 use anyhow::{Context, Result};
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
+use argon2::password_hash::SaltString;
+use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use once_cell::sync::Lazy;
 use secrecy::{ExposeSecret, Secret};
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Clone)]
+pub struct PasswordChangeRequest {
+    current_password: Secret<String>,
+    new_password: Secret<String>,
+    new_password_check: Secret<String>,
+}
+
+impl PasswordChangeRequest {
+    pub fn current_password(&self) -> &str {
+        self.current_password.expose_secret()
+    }
+    pub fn new_password(&self) -> &str {
+        self.new_password.expose_secret()
+    }
+    pub fn check(&self) -> bool {
+        self.new_password.expose_secret() == self.new_password_check.expose_secret()
+    }
+    pub fn to_credentials(&self, username: String) -> (Credentials, Credentials) {
+        let current_credentials =
+            Credentials::new(username.clone(), self.current_password().to_string());
+        let new_credentials = Credentials::new(username, self.new_password().to_string());
+
+        (current_credentials, new_credentials)
+    }
+}
+
+#[derive(serde::Deserialize, Clone)]
 pub struct Credentials {
     username: String,
     password: Secret<String>,
@@ -22,6 +49,10 @@ impl Credentials {
             username,
             password: Secret::new(password),
         }
+    }
+
+    pub fn password(&self) -> Secret<String> {
+        self.password.clone()
     }
 
     #[tracing::instrument(name = "Validate credentials", skip(self, stored_credentials))]
@@ -79,6 +110,12 @@ impl StoredCredentials {
             )
             .map_err(|_| CredentialsError::AuthError("Invalid password.".to_string()))
     }
+    pub fn user_id(&self) -> uuid::Uuid {
+        self.user_id
+    }
+    pub fn password_hash(&self) -> &str {
+        self.password_hash.expose_secret()
+    }
 }
 
 impl Default for StoredCredentials {
@@ -105,4 +142,28 @@ impl From<CredentialsError> for NewsletterError {
             CredentialsError::Unexpected(e) => NewsletterError::Unexpected(e),
         }
     }
+}
+
+const PASSWORD_HASH_M_COST: u32 = 15000;
+const PASSWORD_HASH_T_COST: u32 = 2;
+const PASSWORD_HASH_P_COST: u32 = 1;
+const PASSWORD_HASH_OUTPUT_LEN: Option<usize> = None;
+
+pub fn compute_password_hash(password: Secret<String>) -> Result<Secret<String>, anyhow::Error> {
+    let salt = SaltString::generate(&mut rand::thread_rng());
+    let password_hash = Argon2::new(
+        Algorithm::Argon2id,
+        Version::V0x13,
+        Params::new(
+            PASSWORD_HASH_M_COST,
+            PASSWORD_HASH_T_COST,
+            PASSWORD_HASH_P_COST,
+            PASSWORD_HASH_OUTPUT_LEN,
+        )
+        .unwrap(),
+    )
+    .hash_password(password.expose_secret().as_bytes(), &salt)?
+    .to_string();
+
+    Ok(Secret::new(password_hash))
 }

@@ -10,7 +10,7 @@ use zero2prod::outbound::telemetry::init_logger;
 use std::sync::Arc;
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let configuration = get_configuration().expect("Failed to read configuration");
     init_logger("zero2prod", &configuration.log_level(), std::io::stdout);
 

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": " SELECT username FROM users WHERE user_id = $1 ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "username",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "643816bd6a2bcc56bec82f0605d6ba3bc7d510bc1ed4a8ca3fc1e11d79f00cf1"
+}
