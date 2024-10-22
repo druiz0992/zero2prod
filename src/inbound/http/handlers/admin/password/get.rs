@@ -1,23 +1,14 @@
-use crate::inbound::http::config::get_template_path;
-use actix_web::http::header::ContentType;
+use crate::inbound::http::utils::{self, build_ok_html_response, HtmlTemplate};
 use actix_web::HttpResponse;
 use actix_web_flash_messages::IncomingFlashMessages;
-use std::fmt::Write;
-use std::fs;
 
 pub async fn change_password_form(
     flash_message: IncomingFlashMessages,
 ) -> Result<HttpResponse, actix_web::Error> {
-    let mut msg_html = String::new();
-    for m in flash_message.iter() {
-        writeln!(msg_html, "<p><i>{}</i></p>", m.content()).unwrap();
-    }
-    let path = get_template_path("change_password.html");
-    let html_content = fs::read_to_string(path)
-        .unwrap_or_else(|_| "Failed to load change password page".to_string());
+    let msg_html = utils::flash_message_to_html(flash_message);
+
+    let html_content = utils::load_html(HtmlTemplate::ChangePassword);
     let page_content = html_content.replace("{msg_html}", &msg_html);
 
-    Ok(HttpResponse::Ok()
-        .content_type(ContentType::html())
-        .body(page_content))
+    Ok(build_ok_html_response(page_content))
 }

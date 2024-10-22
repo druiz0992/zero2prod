@@ -1,7 +1,3 @@
-use anyhow::Context;
-use async_trait::async_trait;
-use secrecy::{ExposeSecret, Secret};
-
 use super::{
     credentials::{compute_password_hash, StoredCredentials},
     ports::{AuthRepository, AuthService},
@@ -11,6 +7,9 @@ use crate::{
     outbound::telemetry::spawn_blocking_with_tracing,
 };
 
+use anyhow::Context;
+use async_trait::async_trait;
+use secrecy::{ExposeSecret, Secret};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -50,12 +49,14 @@ where
         tracing::Span::current().record("user_id", tracing::field::display(&user_id));
         Ok(user_id)
     }
+
     async fn get_username(&self, user_id: uuid::Uuid) -> Result<String, CredentialsError> {
         self.repo
             .get_username(user_id)
             .await
             .map_err(CredentialsError::Unexpected)
     }
+
     async fn change_password(
         &self,
         user_id: uuid::Uuid,

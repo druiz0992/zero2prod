@@ -8,6 +8,32 @@ use once_cell::sync::Lazy;
 use secrecy::{ExposeSecret, Secret};
 
 #[derive(serde::Deserialize, Clone)]
+pub struct PasswordChangeRequest {
+    current_password: Secret<String>,
+    new_password: Secret<String>,
+    new_password_check: Secret<String>,
+}
+
+impl PasswordChangeRequest {
+    pub fn current_password(&self) -> &str {
+        self.current_password.expose_secret()
+    }
+    pub fn new_password(&self) -> &str {
+        self.new_password.expose_secret()
+    }
+    pub fn check(&self) -> bool {
+        self.new_password.expose_secret() == self.new_password_check.expose_secret()
+    }
+    pub fn to_credentials(&self, username: String) -> (Credentials, Credentials) {
+        let current_credentials =
+            Credentials::new(username.clone(), self.current_password().to_string());
+        let new_credentials = Credentials::new(username, self.new_password().to_string());
+
+        (current_credentials, new_credentials)
+    }
+}
+
+#[derive(serde::Deserialize, Clone)]
 pub struct Credentials {
     username: String,
     password: Secret<String>,
@@ -118,12 +144,23 @@ impl From<CredentialsError> for NewsletterError {
     }
 }
 
+const PASSWORD_HASH_M_COST: u32 = 15000;
+const PASSWORD_HASH_T_COST: u32 = 2;
+const PASSWORD_HASH_P_COST: u32 = 1;
+const PASSWORD_HASH_OUTPUT_LEN: Option<usize> = None;
+
 pub fn compute_password_hash(password: Secret<String>) -> Result<Secret<String>, anyhow::Error> {
     let salt = SaltString::generate(&mut rand::thread_rng());
     let password_hash = Argon2::new(
         Algorithm::Argon2id,
         Version::V0x13,
-        Params::new(15000, 2, 1, None).unwrap(),
+        Params::new(
+            PASSWORD_HASH_M_COST,
+            PASSWORD_HASH_T_COST,
+            PASSWORD_HASH_P_COST,
+            PASSWORD_HASH_OUTPUT_LEN,
+        )
+        .unwrap(),
     )
     .hash_password(password.expose_secret().as_bytes(), &salt)?
     .to_string();

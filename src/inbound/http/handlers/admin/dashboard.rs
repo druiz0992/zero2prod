@@ -1,10 +1,7 @@
 use crate::inbound::http::auth::UserId;
-use crate::inbound::http::config::get_template_path;
-use crate::inbound::http::utils::e500;
+use crate::inbound::http::utils::{self, e500, HtmlTemplate};
 use crate::{domain::auth::ports::AuthService, inbound::http::state::SharedAuthState};
-use actix_web::http::header::ContentType;
 use actix_web::{web, HttpResponse};
-use std::fs;
 
 #[tracing::instrument(name = "Admin dashboard", skip(user_id, state))]
 pub async fn admin_dashboard<AS: AuthService>(
@@ -18,11 +15,8 @@ pub async fn admin_dashboard<AS: AuthService>(
         .await
         .map_err(e500)?;
 
-    let path = get_template_path("dashboard.html");
-    let html_content =
-        fs::read_to_string(path).unwrap_or_else(|_| "Failed to load dashboard page".to_string());
+    let html_content = utils::load_html(HtmlTemplate::Dashboard);
     let page_content = html_content.replace("{username}", &username);
-    Ok(HttpResponse::Ok()
-        .content_type(ContentType::html())
-        .body(page_content))
+
+    Ok(utils::build_ok_html_response(page_content))
 }

@@ -24,7 +24,6 @@ use tracing_actix_web::TracingLogger;
 use secrecy::{ExposeSecret, Secret};
 
 mod auth;
-mod config;
 mod errors;
 mod handlers;
 pub mod state;
